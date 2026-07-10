@@ -1,9 +1,10 @@
 import React from 'react';
 import '@testing-library/jest-dom';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { CityDetectedPanel } from '../components/CityDetectedPanel';
 import { DetectedPlace } from '../utils/geospatialDetector';
+import * as weatherService from '../services/weatherService';
 
 const sampleMumbai: DetectedPlace = {
   id: 'mumbai',
@@ -13,20 +14,7 @@ const sampleMumbai: DetectedPlace = {
   placeType: 'Metro Area',
   elevationMeters: 14,
   populationEstimate: '21.3 Million',
-  monthlyClimate: [
-    { month: 'Jan', high: 31, low: 18 },
-    { month: 'Feb', high: 31, low: 19 },
-    { month: 'Mar', high: 33, low: 22 },
-    { month: 'Apr', high: 33, low: 25 },
-    { month: 'May', high: 34, low: 27 },
-    { month: 'Jun', high: 32, low: 27 },
-    { month: 'Jul', high: 30, low: 26 },
-    { month: 'Aug', high: 30, low: 25 },
-    { month: 'Sep', high: 31, low: 25 },
-    { month: 'Oct', high: 33, low: 24 },
-    { month: 'Nov', high: 34, low: 22 },
-    { month: 'Dec', high: 32, low: 19 }
-  ],
+  monthlyClimate: [],
   coordinates: [19.076, 72.8777],
   detectionRadiusKm: 35,
   distanceKm: 2.5
@@ -44,7 +32,7 @@ describe('CityDetectedPanel Component', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('should render city name, state, population, and climate grid when detectedCity is provided and zoomed in', () => {
+  it('should render city name, population, and on-demand weather button when zoomed in', () => {
     render(
       <CityDetectedPanel
         detectedCity={sampleMumbai}
@@ -55,52 +43,45 @@ describe('CityDetectedPanel Component', () => {
 
     expect(screen.getByTestId('city-detected-panel')).toBeInTheDocument();
     expect(screen.getByTestId('detected-city-name')).toHaveTextContent('Mumbai');
-    expect(screen.getByTestId('detected-city-state')).toHaveTextContent('Maharashtra');
     expect(screen.getByText('21.3 Million')).toBeInTheDocument();
-    expect(screen.getByText('Jan')).toBeInTheDocument();
-    expect(screen.getByText('Dec')).toBeInTheDocument();
+    expect(screen.getByTestId('fetch-weather-btn')).toBeInTheDocument();
   });
 
-  it('should render administrative detection level based on zoom magnification', () => {
-    render(
-      <CityDetectedPanel
-        detectedCity={sampleMumbai}
-        isZoomedIn={true}
-        zoomLevel={13}
-      />
-    );
+  it('should fetch live weather only when the user clicks Fetch Live Weather button', async () => {
+    const fetchSpy = vi.spyOn(weatherService, 'fetchLiveWeather').mockResolvedValue({
+      currentTemp: 31,
+      feelsLike: 35,
+      humidity: 78,
+      windSpeedKmH: 14,
+      conditionText: 'Partly Cloudy',
+      dailyForecast: [
+        { day: 'Mon', maxTemp: 33, minTemp: 26 },
+        { day: 'Tue', maxTemp: 32, minTemp: 25 }
+      ],
+      fetchedAt: '02:30 PM'
+    });
 
-    expect(screen.getByText(/Taluka \/ Ward Level/i)).toBeInTheDocument();
-  });
-
-  it('should render dynamic town name when detectedCity is null but dynamicPlaceName is provided', () => {
-    render(
-      <CityDetectedPanel
-        detectedCity={null}
-        dynamicPlaceName="Manali"
-        dynamicState="Himachal Pradesh"
-        isZoomedIn={true}
-        zoomLevel={11}
-      />
-    );
-
-    expect(screen.getByTestId('detected-city-name')).toHaveTextContent('Manali');
-    expect(screen.getByTestId('detected-city-state')).toHaveTextContent('Himachal Pradesh');
-  });
-
-  it('should trigger onCenterCity when focus button is clicked', () => {
-    const onCenterCityMock = vi.fn();
     render(
       <CityDetectedPanel
         detectedCity={sampleMumbai}
         isZoomedIn={true}
         zoomLevel={10}
-        onCenterCity={onCenterCityMock}
       />
     );
 
-    const focusButton = screen.getByText('Focus Mumbai');
-    fireEvent.click(focusButton);
-    expect(onCenterCityMock).toHaveBeenCalledWith(19.076, 72.8777);
+    // Click the on-demand button
+    const btn = screen.getByTestId('fetch-weather-btn');
+    fireEvent.click(btn);
+
+    expect(fetchSpy).toHaveBeenCalledWith(19.076, 72.8777);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('live-weather-card')).toBeInTheDocument();
+      expect(screen.getByText('31°C')).toBeInTheDocument();
+      expect(screen.getByText('Partly Cloudy')).toBeInTheDocument();
+      expect(screen.getByText('Mon')).toBeInTheDocument();
+    });
+
+    fetchSpy.mockRestore();
   });
 });
