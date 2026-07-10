@@ -1,3 +1,20 @@
+export const INDIA_BOUNDS_COORDS = {
+  southWest: [5.5, 67.0] as [number, number],
+  northEast: [38.0, 98.5] as [number, number]
+};
+
+/**
+ * Checks if a coordinate is strictly within India's geographical bounding box
+ */
+export function isCoordinateWithinIndiaBounds(lat: number, lng: number): boolean {
+  return (
+    lat >= INDIA_BOUNDS_COORDS.southWest[0] &&
+    lat <= INDIA_BOUNDS_COORDS.northEast[0] &&
+    lng >= INDIA_BOUNDS_COORDS.southWest[1] &&
+    lng <= INDIA_BOUNDS_COORDS.northEast[1]
+  );
+}
+
 export interface MonthlyClimate {
   month: string;
   high: number; // °C

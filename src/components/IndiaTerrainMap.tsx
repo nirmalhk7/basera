@@ -15,7 +15,9 @@ import {
   detectCityAtCoordinates,
   DetectedPlace,
   CITY_ZOOM_THRESHOLD,
-  fetchPlaceGeoJSONBoundary
+  fetchPlaceGeoJSONBoundary,
+  INDIA_BOUNDS_COORDS,
+  isCoordinateWithinIndiaBounds
 } from '../utils/geospatialDetector';
 import { CityDetectedPanel } from './CityDetectedPanel';
 
@@ -92,9 +94,17 @@ export default function IndiaTerrainMap() {
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
+    const indiaBounds = L.latLngBounds(
+      INDIA_BOUNDS_COORDS.southWest,
+      INDIA_BOUNDS_COORDS.northEast
+    );
+
     const map = L.map(mapContainerRef.current, {
       center: INDIA_CENTER,
       zoom: INDIA_DEFAULT_ZOOM,
+      minZoom: 4.8,
+      maxBounds: indiaBounds,
+      maxBoundsViscosity: 1.0,
       zoomControl: false,
       attributionControl: true
     });
@@ -137,11 +147,13 @@ export default function IndiaTerrainMap() {
     map.on('move', handleMoveOrZoom);
     map.on('zoom', handleMoveOrZoom);
 
-    // Click anywhere on map to smoothly pan/zoom toward it
+    // Click anywhere on map to smoothly pan/zoom toward it only if inside India
     map.on('click', (e: L.LeafletMouseEvent) => {
-      map.flyTo([e.latlng.lat, e.latlng.lng], Math.max(map.getZoom(), 11), {
-        duration: 1.2
-      });
+      if (isCoordinateWithinIndiaBounds(e.latlng.lat, e.latlng.lng)) {
+        map.flyTo([e.latlng.lat, e.latlng.lng], Math.max(map.getZoom(), 11), {
+          duration: 1.2
+        });
+      }
     });
 
     return () => {
@@ -260,7 +272,7 @@ export default function IndiaTerrainMap() {
   }, [isZoomedInCity, detectedCity, dynamicPlaceName, dynamicCoords]);
 
   const handleFlyToCoords = (lat: number, lng: number) => {
-    if (mapInstanceRef.current) {
+    if (mapInstanceRef.current && isCoordinateWithinIndiaBounds(lat, lng)) {
       mapInstanceRef.current.flyTo([lat, lng], 11, {
         duration: 1.6
       });

@@ -2,11 +2,28 @@ import { describe, it, expect } from 'vitest';
 import {
   calculateHaversineDistanceKm,
   detectCityAtCoordinates,
-  CITY_ZOOM_THRESHOLD,
-  KNOWN_INDIAN_CITIES_INDEX
+  isCoordinateWithinIndiaBounds,
+  INDIA_BOUNDS_COORDS,
+  CITY_ZOOM_THRESHOLD
 } from '../utils/geospatialDetector';
 
 describe('Geospatial Detector Utility', () => {
+  describe('isCoordinateWithinIndiaBounds', () => {
+    it('should return true for major Indian cities inside bounds', () => {
+      expect(isCoordinateWithinIndiaBounds(19.076, 72.8777)).toBe(true); // Mumbai
+      expect(isCoordinateWithinIndiaBounds(28.6139, 77.209)).toBe(true); // New Delhi
+      expect(isCoordinateWithinIndiaBounds(34.1526, 77.5771)).toBe(true); // Leh
+      expect(isCoordinateWithinIndiaBounds(8.0883, 77.5385)).toBe(true); // Kanyakumari
+    });
+
+    it('should return false for coordinates outside India bounding box', () => {
+      expect(isCoordinateWithinIndiaBounds(51.5072, -0.1276)).toBe(false); // London
+      expect(isCoordinateWithinIndiaBounds(40.7128, -74.006)).toBe(false); // New York
+      expect(isCoordinateWithinIndiaBounds(35.6762, 139.6503)).toBe(false); // Tokyo
+      expect(isCoordinateWithinIndiaBounds(-33.8688, 151.2093)).toBe(false); // Sydney
+    });
+  });
+
   describe('calculateHaversineDistanceKm', () => {
     it('should return 0 for identical coordinates', () => {
       const dist = calculateHaversineDistanceKm(19.076, 72.8777, 19.076, 72.8777);
@@ -34,14 +51,12 @@ describe('Geospatial Detector Utility', () => {
     });
 
     it('should detect New Delhi when coordinates are within Delhi detection radius at zoom 10', () => {
-      // Slightly offset coordinates within 10 km of New Delhi center
       const result = detectCityAtCoordinates(28.62, 77.21, 10);
       expect(result).not.toBeNull();
       expect(result?.name).toBe('New Delhi');
     });
 
     it('should return null when coordinates are far outside any indexed city at zoom 10', () => {
-      // Middle of Arabian Sea
       const result = detectCityAtCoordinates(14.0, 68.0, 10);
       expect(result).toBeNull();
     });
