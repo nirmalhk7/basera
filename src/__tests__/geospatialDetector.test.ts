@@ -14,6 +14,7 @@ describe('Geospatial Detector Utility', () => {
       expect(isCoordinateWithinIndiaBounds(28.6139, 77.209)).toBe(true); // New Delhi
       expect(isCoordinateWithinIndiaBounds(34.1526, 77.5771)).toBe(true); // Leh
       expect(isCoordinateWithinIndiaBounds(8.0883, 77.5385)).toBe(true); // Kanyakumari
+      expect(isCoordinateWithinIndiaBounds(22.0, 60.0)).toBe(true); // Western Arabian Sea / Gujarat left scroll margin
     });
 
     it('should return false for coordinates outside India bounding box', () => {

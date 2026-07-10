@@ -128,10 +128,11 @@ export default function IndiaTerrainMap() {
     // Add zoom controls cleanly to bottom right
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    // Initial Dark Cyber Map tile layer
+    // High-contrast Dark Cyber Map tile layer for vivid roads & water bodies
     tileLayerRef.current = L.tileLayer(DARK_CYBER_MAP.url, {
       attribution: DARK_CYBER_MAP.attribution,
-      maxZoom: DARK_CYBER_MAP.maxZoom
+      maxZoom: DARK_CYBER_MAP.maxZoom,
+      className: 'cyber-high-contrast-tiles'
     }).addTo(map);
 
     let debounceTimer: NodeJS.Timeout;

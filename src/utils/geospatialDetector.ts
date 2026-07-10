@@ -1,6 +1,6 @@
 export const INDIA_BOUNDS_COORDS = {
-  southWest: [5.5, 67.0] as [number, number],
-  northEast: [38.0, 98.5] as [number, number]
+  southWest: [4.5, 58.0] as [number, number],
+  northEast: [39.0, 99.5] as [number, number]
 };
 
 /**

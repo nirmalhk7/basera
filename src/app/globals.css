@@ -121,3 +121,8 @@
   }
 }
 
+/* High-Contrast Cyber Map Tiles: Enhances road contrast and gives water bodies a vivid cool cyan-indigo glow */
+.cyber-high-contrast-tiles {
+  filter: contrast(1.28) brightness(1.15) saturate(1.45) hue-rotate(-10deg) !important;
+}
+
