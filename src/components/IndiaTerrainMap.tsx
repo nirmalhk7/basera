@@ -427,11 +427,9 @@ export default function IndiaTerrainMap() {
         className="pointer-events-none absolute inset-0 flex items-center justify-center z-[850]"
       >
         <div className="relative flex items-center justify-center">
-          {/* Glowing Center Plus (+) */}
-          <div className="h-7 w-0.5 bg-emerald-400 shadow-[0_0_12px_#10b981]" />
-          <div className="absolute h-0.5 w-7 bg-emerald-400 shadow-[0_0_12px_#10b981]" />
-          {/* Target Radar Bracket Ring */}
-          <div className="absolute -inset-5 border border-emerald-400/40 rounded-full animate-pulse" />
+          {/* White Center Plus (+) */}
+          <div className="h-6 w-[2px] bg-white shadow-[0_0_8px_rgba(255,255,255,0.75)]" />
+          <div className="absolute h-[2px] w-6 bg-white shadow-[0_0_8px_rgba(255,255,255,0.75)]" />
         </div>
       </div>
 
