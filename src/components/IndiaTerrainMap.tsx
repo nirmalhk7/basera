@@ -14,7 +14,8 @@ import { searchDynamicPlaces, NominatimSearchResult, fetchDynamicCityInfo } from
 import {
   detectCityAtCoordinates,
   DetectedPlace,
-  CITY_ZOOM_THRESHOLD
+  CITY_ZOOM_THRESHOLD,
+  fetchPlaceGeoJSONBoundary
 } from '../utils/geospatialDetector';
 import { CityDetectedPanel } from './CityDetectedPanel';
 
@@ -33,8 +34,8 @@ export default function IndiaTerrainMap() {
   const mapInstanceRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
 
-  // References for map highlight layers
-  const highlightCircleRef = useRef<L.Circle | null>(null);
+  // Reference for GeoJSON polygon boundary layer on the map
+  const boundaryGeoJsonLayerRef = useRef<L.GeoJSON | null>(null);
   const highlightBeaconRef = useRef<L.Marker | null>(null);
 
   const [zoomLevel, setZoomLevel] = useState<number>(5);
@@ -152,19 +153,27 @@ export default function IndiaTerrainMap() {
 
   const isZoomedInCity = zoomLevel >= CITY_ZOOM_THRESHOLD;
 
-  // Manage Cyber City Highlight on the Map when a city/town is detected
+  // Manage Administrative Boundary GeoJSON Polygon Highlight on the Map
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    // Helper to clean up highlights
+    // Helper to clean up boundary & beacon highlights
     const clearHighlights = () => {
-      if (highlightCircleRef.current) {
-        map.removeLayer(highlightCircleRef.current);
-        highlightCircleRef.current = null;
+      if (boundaryGeoJsonLayerRef.current) {
+        try {
+          if (map.hasLayer(boundaryGeoJsonLayerRef.current)) {
+            map.removeLayer(boundaryGeoJsonLayerRef.current);
+          }
+        } catch (e) {}
+        boundaryGeoJsonLayerRef.current = null;
       }
       if (highlightBeaconRef.current) {
-        map.removeLayer(highlightBeaconRef.current);
+        try {
+          if (map.hasLayer(highlightBeaconRef.current)) {
+            map.removeLayer(highlightBeaconRef.current);
+          }
+        } catch (e) {}
         highlightBeaconRef.current = null;
       }
     };
@@ -178,50 +187,77 @@ export default function IndiaTerrainMap() {
       ? detectedCity.coordinates
       : dynamicCoords;
 
-    const targetRadiusKm = detectedCity ? detectedCity.detectionRadiusKm : 12;
+    const targetName = detectedCity ? detectedCity.name : dynamicPlaceName;
 
-    if (!targetCoords) {
+    if (!targetCoords || !targetName) {
       clearHighlights();
       return;
     }
 
-    clearHighlights();
+    let isMounted = true;
 
-    // Create cyber radar circle around the detected place
-    const circle = L.circle(targetCoords, {
-      radius: targetRadiusKm * 1000,
-      color: '#10b981',
-      weight: 2,
-      dashArray: '6, 8',
-      fillColor: '#10b981',
-      fillOpacity: 0.12
-    }).addTo(map);
+    // Fetch and render actual GeoJSON boundary borders of the place instead of a circle
+    fetchPlaceGeoJSONBoundary(targetName, targetCoords[0], targetCoords[1]).then(geojson => {
+      if (!isMounted || !mapInstanceRef.current) return;
+      clearHighlights();
 
-    // Create glowing pulsing cyber beacon at center
-    const cyberIcon = L.divIcon({
-      className: 'cyber-beacon-container',
-      html: `
-        <div class="cyber-beacon-pulse">
-          <div class="cyber-beacon-ring"></div>
-          <div class="cyber-beacon-core"></div>
-        </div>
-      `,
-      iconSize: [24, 24],
-      iconAnchor: [12, 12]
+      if (geojson) {
+        const geoLayer = L.geoJSON(geojson, {
+          style: {
+            color: '#10b981',
+            weight: 2.8,
+            dashArray: '6, 4',
+            fillColor: '#10b981',
+            fillOpacity: 0.14
+          }
+        }).addTo(map);
+        boundaryGeoJsonLayerRef.current = geoLayer;
+      } else {
+        // Fallback polygon border around the bounding box if GeoJSON is not returned
+        const deltaLat = 0.08;
+        const deltaLng = 0.08;
+        const fallbackPolygonCoords: L.LatLngExpression[] = [
+          [targetCoords[0] - deltaLat, targetCoords[1] - deltaLng],
+          [targetCoords[0] - deltaLat, targetCoords[1] + deltaLng],
+          [targetCoords[0] + deltaLat, targetCoords[1] + deltaLng],
+          [targetCoords[0] + deltaLat, targetCoords[1] - deltaLng]
+        ];
+        const polyLayer = L.polygon(fallbackPolygonCoords, {
+          color: '#10b981',
+          weight: 2.5,
+          dashArray: '6, 4',
+          fillColor: '#10b981',
+          fillOpacity: 0.1
+        }).addTo(map);
+        boundaryGeoJsonLayerRef.current = polyLayer as any;
+      }
+
+      // Add cyber beacon at center
+      const cyberIcon = L.divIcon({
+        className: 'cyber-beacon-container',
+        html: `
+          <div class="cyber-beacon-pulse">
+            <div class="cyber-beacon-ring"></div>
+            <div class="cyber-beacon-core"></div>
+          </div>
+        `,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+      });
+
+      const beacon = L.marker(targetCoords, {
+        icon: cyberIcon,
+        interactive: false
+      }).addTo(map);
+
+      highlightBeaconRef.current = beacon;
     });
 
-    const beacon = L.marker(targetCoords, {
-      icon: cyberIcon,
-      interactive: false
-    }).addTo(map);
-
-    highlightCircleRef.current = circle;
-    highlightBeaconRef.current = beacon;
-
     return () => {
+      isMounted = false;
       clearHighlights();
     };
-  }, [isZoomedInCity, detectedCity, dynamicCoords]);
+  }, [isZoomedInCity, detectedCity, dynamicPlaceName, dynamicCoords]);
 
   const handleFlyToCoords = (lat: number, lng: number) => {
     if (mapInstanceRef.current) {
@@ -260,7 +296,7 @@ export default function IndiaTerrainMap() {
         <div className="pointer-events-auto flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-slate-950/85 backdrop-blur-2xl border border-white/15 shadow-2xl text-white">
           <div className="flex items-center gap-2">
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-extrabold tracking-tight text-base">INDIA CYBER MAP</span>
+            <span className="font-extrabold tracking-tight text-base">BASERA</span>
           </div>
           <div className="h-4 w-px bg-white/15" />
           <button
@@ -307,7 +343,8 @@ export default function IndiaTerrainMap() {
                 <span>Dynamic Search Results</span>
                 <button
                   onClick={() => setShowDropdown(false)}
-                  className="text-emerald-400 hover:underline"
+                  className="text-emerald-4
+                  0 hover:underline"
                 >
                   Close
                 </button>
@@ -355,12 +392,13 @@ export default function IndiaTerrainMap() {
         </div>
       </div>
 
-      {/* Top Left Geospatial Detection Panel (moved under the Fly By strip at top-32) */}
+      {/* Top Left Geospatial Detection Panel underneath Fly By strip */}
       <CityDetectedPanel
         detectedCity={detectedCity}
         dynamicPlaceName={dynamicPlaceName}
         dynamicState={dynamicStateName}
         isZoomedIn={isZoomedInCity}
+        zoomLevel={zoomLevel}
         onCenterCity={handleFlyToCoords}
         onResetView={handleResetIndiaView}
       />
