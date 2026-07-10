@@ -60,6 +60,7 @@ export default function IndiaTerrainMap() {
   const [dynamicPlaceName, setDynamicPlaceName] = useState<string | undefined>(undefined);
   const [dynamicStateName, setDynamicStateName] = useState<string | undefined>(undefined);
   const [dynamicCoords, setDynamicCoords] = useState<[number, number] | null>(null);
+  const [centerCoords, setCenterCoords] = useState<[number, number]>(INDIA_CENTER);
 
   useEffect(() => {
     if (!searchQuery || searchQuery.trim().length < 2) {
@@ -139,6 +140,7 @@ export default function IndiaTerrainMap() {
       const currentZoom = map.getZoom();
       const center = map.getCenter();
       setZoomLevel(currentZoom);
+      setCenterCoords([center.lat, center.lng]);
 
       // Local city detection check
       const localDetected = detectCityAtCoordinates(center.lat, center.lng, currentZoom);
@@ -348,7 +350,7 @@ export default function IndiaTerrainMap() {
             )}
             <input
               type="text"
-              placeholder="Search any city, town or location in India..."
+              placeholder="Search any district in India..."
               value={searchQuery}
               onChange={e => {
                 setSearchQuery(e.target.value);
@@ -464,10 +466,22 @@ export default function IndiaTerrainMap() {
       {/* Full Screen Leaflet Map Container */}
       <div ref={mapContainerRef} className="w-full h-full z-0" />
 
-      {/* Minimalist Bottom HUD Badge */}
-      <div className="absolute bottom-4 left-4 z-[1000] flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-950/85 backdrop-blur-2xl border border-white/15 shadow-2xl text-xs text-slate-300 pointer-events-auto">
-        <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-        <span>Zoom: <strong className="text-white">{zoomLevel.toFixed(1)}x</strong></span>
+      {/* Minimalist Bottom HUD Badge showing Zoom pill + Center (+) Target coordinates */}
+      <div
+        data-testid="bottom-hud-badge"
+        className="absolute bottom-4 left-4 z-[1000] flex items-center gap-3 px-3.5 py-1.5 rounded-xl bg-slate-950/85 backdrop-blur-2xl border border-white/15 shadow-2xl text-xs text-slate-300 pointer-events-auto font-mono"
+      >
+        <div className="flex items-center gap-1.5 font-sans">
+          <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+          <span>Zoom: <strong className="text-white">{zoomLevel.toFixed(1)}x</strong></span>
+        </div>
+        <div className="h-3.5 w-px bg-white/15" />
+        <div className="flex items-center gap-1.5 text-slate-300">
+          <span className="text-slate-400 font-sans">Center (+) Target:</span>
+          <strong className="text-emerald-300">
+            {centerCoords[0].toFixed(4)}° N, {centerCoords[1].toFixed(4)}° E
+          </strong>
+        </div>
       </div>
     </div>
   );

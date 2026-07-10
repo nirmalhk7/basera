@@ -1,10 +1,9 @@
 import React from 'react';
 import '@testing-library/jest-dom';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect } from 'vitest';
+import { render, screen } from '@testing-library/react';
 import { CityDetectedPanel } from '../components/CityDetectedPanel';
 import { DetectedPlace } from '../utils/geospatialDetector';
-import * as weatherService from '../services/weatherService';
 
 const sampleMumbai: DetectedPlace = {
   id: 'mumbai',
@@ -14,7 +13,20 @@ const sampleMumbai: DetectedPlace = {
   placeType: 'Metro Area',
   elevationMeters: 14,
   populationEstimate: '21.3 Million',
-  monthlyClimate: [],
+  monthlyClimate: [
+    { month: 'Jan', high: 31, low: 17, rainfallMm: 1 },
+    { month: 'Feb', high: 31, low: 18, rainfallMm: 1 },
+    { month: 'Mar', high: 33, low: 21, rainfallMm: 0 },
+    { month: 'Apr', high: 33, low: 24, rainfallMm: 1 },
+    { month: 'May', high: 34, low: 27, rainfallMm: 13 },
+    { month: 'Jun', high: 32, low: 26, rainfallMm: 523 },
+    { month: 'Jul', high: 30, low: 25, rainfallMm: 841 },
+    { month: 'Aug', high: 30, low: 25, rainfallMm: 585 },
+    { month: 'Sep', high: 31, low: 25, rainfallMm: 341 },
+    { month: 'Oct', high: 33, low: 24, rainfallMm: 89 },
+    { month: 'Nov', high: 34, low: 21, rainfallMm: 10 },
+    { month: 'Dec', high: 32, low: 18, rainfallMm: 2 }
+  ],
   coordinates: [19.076, 72.8777],
   detectionRadiusKm: 35,
   distanceKm: 2.5
@@ -32,7 +44,7 @@ describe('CityDetectedPanel Component', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('should render city name, population, and on-demand weather button when zoomed in', () => {
+  it('should render city name, population, and 12-month climate grid when zoomed in', () => {
     render(
       <CityDetectedPanel
         detectedCity={sampleMumbai}
@@ -44,10 +56,11 @@ describe('CityDetectedPanel Component', () => {
     expect(screen.getByTestId('city-detected-panel')).toBeInTheDocument();
     expect(screen.getByTestId('detected-city-name')).toHaveTextContent('Mumbai');
     expect(screen.getByText('21.3 Million')).toBeInTheDocument();
-    expect(screen.getByTestId('fetch-weather-btn')).toBeInTheDocument();
+    expect(screen.getByText(/Monthly Climate \(High \/ Low °C\)/i)).toBeInTheDocument();
+    expect(screen.getByText('Jan')).toBeInTheDocument();
   });
 
-  it('should render exact District reticle card when activeDistrict is provided', () => {
+  it('should render exact District reticle card without Center Target coordinates or Basera Target header', () => {
     render(
       <CityDetectedPanel
         detectedCity={null}
@@ -64,43 +77,7 @@ describe('CityDetectedPanel Component', () => {
 
     expect(screen.getByTestId('detected-city-name')).toHaveTextContent('Pune District');
     expect(screen.getByTestId('detected-city-state')).toHaveTextContent(/Maharashtra/i);
-    expect(screen.getByText(/Center \(\+\) Target:/i)).toBeInTheDocument();
-  });
-
-  it('should fetch live weather only when the user clicks Fetch Live Weather button', async () => {
-    const fetchSpy = vi.spyOn(weatherService, 'fetchLiveWeather').mockResolvedValue({
-      currentTemp: 31,
-      feelsLike: 35,
-      humidity: 78,
-      windSpeedKmH: 14,
-      conditionText: 'Partly Cloudy',
-      dailyForecast: [
-        { day: 'Mon', maxTemp: 33, minTemp: 26 },
-        { day: 'Tue', maxTemp: 32, minTemp: 25 }
-      ],
-      fetchedAt: '02:30 PM'
-    });
-
-    render(
-      <CityDetectedPanel
-        detectedCity={sampleMumbai}
-        isZoomedIn={true}
-        zoomLevel={10}
-      />
-    );
-
-    const btn = screen.getByTestId('fetch-weather-btn');
-    fireEvent.click(btn);
-
-    expect(fetchSpy).toHaveBeenCalledWith(19.076, 72.8777);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('live-weather-card')).toBeInTheDocument();
-      expect(screen.getByText('31°C')).toBeInTheDocument();
-      expect(screen.getByText('Partly Cloudy')).toBeInTheDocument();
-      expect(screen.getByText('Mon')).toBeInTheDocument();
-    });
-
-    fetchSpy.mockRestore();
+    expect(screen.queryByText(/Center \(\+\) Target/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/BASERA TARGET LAYER/i)).not.toBeInTheDocument();
   });
 });

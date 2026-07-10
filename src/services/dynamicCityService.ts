@@ -27,23 +27,27 @@ export interface NominatimSearchResult {
 }
 
 /**
- * Dynamically searches ANY city/town in India using OpenStreetMap Nominatim API
+ * Dynamically searches for all districts in India using OpenStreetMap Nominatim API
  */
 export async function searchDynamicPlaces(query: string): Promise<NominatimSearchResult[]> {
   if (!query || query.trim().length < 2) return [];
   try {
+    const cleanQuery = query.toLowerCase().includes('district')
+      ? query
+      : `${query} district`;
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
-      query
-    )}&countrycodes=in&format=jsonv2&limit=6&addressdetails=1`;
+      cleanQuery + ', India'
+    )}&countrycodes=in&format=jsonv2&limit=8&addressdetails=1`;
     const res = await fetch(url, {
       headers: {
-        'User-Agent': 'IndiaTerrainExplorerApp/1.0'
+        'User-Agent': 'BaseraIndiaMap/1.0'
       }
     });
     if (!res.ok) return [];
-    return await res.json();
+    const data: NominatimSearchResult[] = await res.json();
+    return data;
   } catch (err) {
-    console.error('Nominatim search error:', err);
+    console.error('Nominatim district search error:', err);
     return [];
   }
 }
