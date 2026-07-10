@@ -17,37 +17,84 @@ export interface NominatimSearchResult {
   lat: string;
   lon: string;
   name: string;
+  addresstype?: string;
+  type?: string;
+  class?: string;
   address?: {
     city?: string;
     town?: string;
     village?: string;
     state?: string;
     state_district?: string;
+    county?: string;
+    district?: string;
   };
 }
 
 /**
- * Dynamically searches for all districts in India using OpenStreetMap Nominatim API
+ * Dynamically searches strictly for administrative districts in India using OpenStreetMap Nominatim API
  */
 export async function searchDynamicPlaces(query: string): Promise<NominatimSearchResult[]> {
   if (!query || query.trim().length < 2) return [];
   try {
     const cleanQuery = query.toLowerCase().includes('district')
-      ? query
-      : `${query} district`;
+      ? query.trim()
+      : `${query.trim()} district`;
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
       cleanQuery + ', India'
-    )}&countrycodes=in&format=jsonv2&limit=8&addressdetails=1`;
+    )}&countrycodes=in&format=jsonv2&limit=15&addressdetails=1`;
     const res = await fetch(url, {
       headers: {
         'User-Agent': 'BaseraIndiaMap/1.0'
       }
     });
     if (!res.ok) return [];
-    const data: NominatimSearchResult[] = await res.json();
-    return data;
+    const rawData: NominatimSearchResult[] = await res.json();
+
+    // Strictly filter for administrative districts
+    const districtResults = rawData.filter(item => {
+      const addrType = (item.addresstype || '').toLowerCase();
+      const disp = (item.display_name || '').toLowerCase();
+      const addr = item.address || {};
+      const isDistrictType =
+        addrType === 'district' ||
+        addrType === 'state_district' ||
+        addrType === 'county' ||
+        disp.includes('district');
+      return isDistrictType;
+    });
+
+    // Deduplicate and ensure clean district naming
+    const seenNames = new Set<string>();
+    const cleanDistricts: NominatimSearchResult[] = [];
+
+    for (const item of districtResults) {
+      const addr = item.address || {};
+      const baseName =
+        addr.state_district ||
+        addr.district ||
+        addr.county ||
+        item.name ||
+        item.display_name.split(',')[0];
+      const normalizedName = baseName.toLowerCase().includes('district')
+        ? baseName
+        : `${baseName} District`;
+
+      const key = normalizedName.toLowerCase();
+      if (!seenNames.has(key)) {
+        seenNames.add(key);
+        const stateName = addr.state || 'India';
+        cleanDistricts.push({
+          ...item,
+          name: normalizedName,
+          display_name: `${normalizedName}, ${stateName}`
+        });
+      }
+    }
+
+    return cleanDistricts.slice(0, 8);
   } catch (err) {
-    console.error('Nominatim district search error:', err);
+    console.error('Nominatim strict district search error:', err);
     return [];
   }
 }
