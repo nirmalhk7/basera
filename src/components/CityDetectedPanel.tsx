@@ -33,7 +33,7 @@ export function CityDetectedPanel({
   return (
     <div
       data-testid="city-detected-panel"
-      className="absolute top-20 left-4 z-[1000] w-80 max-w-[calc(100vw-32px)] transition-all duration-300 ease-out animate-in fade-in slide-in-from-top-3"
+      className="absolute top-32 left-4 z-[1000] w-80 max-w-[calc(100vw-32px)] transition-all duration-300 ease-out animate-in fade-in slide-in-from-top-3"
     >
       <div className="relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-slate-950/90 backdrop-blur-2xl shadow-2xl shadow-black/80 p-4 text-slate-100">
         {/* Glow Accent Top Bar */}

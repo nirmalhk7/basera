@@ -33,6 +33,10 @@ export default function IndiaTerrainMap() {
   const mapInstanceRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
 
+  // References for map highlight layers
+  const highlightCircleRef = useRef<L.Circle | null>(null);
+  const highlightBeaconRef = useRef<L.Marker | null>(null);
+
   const [zoomLevel, setZoomLevel] = useState<number>(5);
 
   // Search state
@@ -45,6 +49,7 @@ export default function IndiaTerrainMap() {
   const [detectedCity, setDetectedCity] = useState<DetectedPlace | null>(null);
   const [dynamicPlaceName, setDynamicPlaceName] = useState<string | undefined>(undefined);
   const [dynamicStateName, setDynamicStateName] = useState<string | undefined>(undefined);
+  const [dynamicCoords, setDynamicCoords] = useState<[number, number] | null>(null);
 
   useEffect(() => {
     if (!searchQuery || searchQuery.trim().length < 2) {
@@ -67,6 +72,7 @@ export default function IndiaTerrainMap() {
     if (zoom < CITY_ZOOM_THRESHOLD) {
       setDynamicPlaceName(undefined);
       setDynamicStateName(undefined);
+      setDynamicCoords(null);
       return;
     }
     try {
@@ -74,6 +80,7 @@ export default function IndiaTerrainMap() {
       if (info && info.name && info.name !== 'Unknown Terrain Location') {
         setDynamicPlaceName(info.name);
         setDynamicStateName(info.state);
+        setDynamicCoords([lat, lng]);
       }
     } catch (err) {
       console.warn('Geospatial fallback error:', err);
@@ -122,6 +129,7 @@ export default function IndiaTerrainMap() {
       } else {
         setDynamicPlaceName(undefined);
         setDynamicStateName(undefined);
+        setDynamicCoords(null);
       }
     };
 
@@ -141,6 +149,79 @@ export default function IndiaTerrainMap() {
       mapInstanceRef.current = null;
     };
   }, [checkDynamicCityFallback]);
+
+  const isZoomedInCity = zoomLevel >= CITY_ZOOM_THRESHOLD;
+
+  // Manage Cyber City Highlight on the Map when a city/town is detected
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    // Helper to clean up highlights
+    const clearHighlights = () => {
+      if (highlightCircleRef.current) {
+        map.removeLayer(highlightCircleRef.current);
+        highlightCircleRef.current = null;
+      }
+      if (highlightBeaconRef.current) {
+        map.removeLayer(highlightBeaconRef.current);
+        highlightBeaconRef.current = null;
+      }
+    };
+
+    if (!isZoomedInCity) {
+      clearHighlights();
+      return;
+    }
+
+    const targetCoords: [number, number] | null = detectedCity
+      ? detectedCity.coordinates
+      : dynamicCoords;
+
+    const targetRadiusKm = detectedCity ? detectedCity.detectionRadiusKm : 12;
+
+    if (!targetCoords) {
+      clearHighlights();
+      return;
+    }
+
+    clearHighlights();
+
+    // Create cyber radar circle around the detected place
+    const circle = L.circle(targetCoords, {
+      radius: targetRadiusKm * 1000,
+      color: '#10b981',
+      weight: 2,
+      dashArray: '6, 8',
+      fillColor: '#10b981',
+      fillOpacity: 0.12
+    }).addTo(map);
+
+    // Create glowing pulsing cyber beacon at center
+    const cyberIcon = L.divIcon({
+      className: 'cyber-beacon-container',
+      html: `
+        <div class="cyber-beacon-pulse">
+          <div class="cyber-beacon-ring"></div>
+          <div class="cyber-beacon-core"></div>
+        </div>
+      `,
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+
+    const beacon = L.marker(targetCoords, {
+      icon: cyberIcon,
+      interactive: false
+    }).addTo(map);
+
+    highlightCircleRef.current = circle;
+    highlightBeaconRef.current = beacon;
+
+    return () => {
+      clearHighlights();
+    };
+  }, [isZoomedInCity, detectedCity, dynamicCoords]);
 
   const handleFlyToCoords = (lat: number, lng: number) => {
     if (mapInstanceRef.current) {
@@ -170,8 +251,6 @@ export default function IndiaTerrainMap() {
     { name: 'Kochi', lat: 9.9312, lng: 76.2673 },
     { name: 'Varanasi', lat: 25.3176, lng: 82.9739 }
   ];
-
-  const isZoomedInCity = zoomLevel >= CITY_ZOOM_THRESHOLD;
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-slate-950 font-sans select-none">
@@ -276,7 +355,7 @@ export default function IndiaTerrainMap() {
         </div>
       </div>
 
-      {/* Top Left Geospatial Detection Panel (under the fly to / header) */}
+      {/* Top Left Geospatial Detection Panel (moved under the Fly By strip at top-32) */}
       <CityDetectedPanel
         detectedCity={detectedCity}
         dynamicPlaceName={dynamicPlaceName}
@@ -286,7 +365,7 @@ export default function IndiaTerrainMap() {
         onResetView={handleResetIndiaView}
       />
 
-      {/* Quick Fly Cities Strip below top bar */}
+      {/* Quick Fly Cities Strip below top bar at top-20 */}
       <div className="absolute top-20 left-4 right-4 z-[990] hidden md:flex items-center gap-2 overflow-x-auto pointer-events-none">
         <div className="pointer-events-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-950/80 backdrop-blur-xl border border-white/10 shadow-lg">
           <span className="text-[10px] font-bold uppercase text-slate-400">Fly to:</span>
