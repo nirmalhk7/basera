@@ -1,26 +1,76 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: #020617;
+    color: #f8fafc;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    overflow: hidden;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(2, 6, 23, 0.4);
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(16, 185, 129, 0.3);
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 185, 129, 0.6);
+}
+
+/* Leaflet Overrides for sleek HUD integration */
+.leaflet-container {
+  background-color: #020617 !important;
+  font-family: inherit !important;
+}
+
+.leaflet-control-zoom {
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 12px !important;
+  overflow: hidden !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5) !important;
+}
+
+.leaflet-control-zoom-in,
+.leaflet-control-zoom-out {
+  background-color: rgba(2, 6, 23, 0.85) !important;
+  color: #f8fafc !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: blur(12px) !important;
+  width: 36px !important;
+  height: 36px !important;
+  line-height: 36px !important;
+  font-size: 16px !important;
+  font-weight: bold !important;
+}
+
+.leaflet-control-zoom-in:hover,
+.leaflet-control-zoom-out:hover {
+  background-color: rgba(16, 185, 129, 0.3) !important;
+  color: #10b981 !important;
+}
+
+.leaflet-control-attribution {
+  background-color: rgba(2, 6, 23, 0.75) !important;
+  color: #94a3b8 !important;
+  backdrop-filter: blur(8px) !important;
+  border-top-left-radius: 8px !important;
+  font-size: 10px !important;
+  padding: 2px 8px !important;
+}
+
+.leaflet-control-attribution a {
+  color: #34d399 !important;
 }

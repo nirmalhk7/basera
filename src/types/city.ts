@@ -1,0 +1,41 @@
+export interface DynamicCityInfo {
+  name: string;
+  state: string;
+  district?: string;
+  country: string;
+  coordinates: [number, number]; // [lat, lng]
+  elevationMeters: number;
+  population?: number;
+  areaEstimateSqKm?: number;
+  placeType: string; // e.g., 'city', 'town', 'suburb', 'district capital'
+  wikiSummary?: {
+    extract: string;
+    title: string;
+    url?: string;
+    thumbnailUrl?: string;
+  };
+  weather: {
+    temperatureCelsius: number;
+    apparentTemperature: number;
+    relativeHumidity: number;
+    windSpeedKmh: number;
+    precipitationMm: number;
+    weatherCode: number;
+    weatherDescription: string;
+    dailyMaxTemp?: number;
+    dailyMinTemp?: number;
+    isDay: boolean;
+    fetchedAt: string;
+  };
+}
+
+export type TerrainLayerId = 'esri-topo' | 'opentopomap' | 'satellite' | 'dark-relief';
+
+export interface TerrainLayerOption {
+  id: TerrainLayerId;
+  name: string;
+  subtitle: string;
+  url: string;
+  attribution: string;
+  maxZoom: number;
+}
