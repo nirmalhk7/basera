@@ -6,6 +6,7 @@ import {
   getAdministrativeDetectionLevel
 } from '../utils/geospatialDetector';
 import { fetchLiveWeather, LiveWeatherData } from '../services/weatherService';
+import { DistrictReticleInfo } from '../services/dynamicCityService';
 import {
   MapPin,
   Compass,
@@ -16,11 +17,13 @@ import {
   Wind,
   Droplets,
   Layers,
-  Sparkles
+  Sparkles,
+  Crosshair
 } from 'lucide-react';
 
 interface CityDetectedPanelProps {
   detectedCity: DetectedPlace | null;
+  activeDistrict?: DistrictReticleInfo | null;
   dynamicPlaceName?: string;
   dynamicState?: string;
   dynamicCoords?: [number, number] | null;
@@ -32,6 +35,7 @@ interface CityDetectedPanelProps {
 
 export function CityDetectedPanel({
   detectedCity,
+  activeDistrict,
   dynamicPlaceName,
   dynamicState,
   dynamicCoords,
@@ -45,31 +49,44 @@ export function CityDetectedPanel({
   const [weatherError, setWeatherError] = useState<string | null>(null);
 
   // Reset weather whenever place changes so we don't automatically make API calls
-  const placeIdKey = detectedCity ? detectedCity.id : dynamicPlaceName || '';
+  const placeIdKey =
+    activeDistrict?.districtName ||
+    (detectedCity ? detectedCity.id : dynamicPlaceName || '');
+
   useEffect(() => {
     setLiveWeather(null);
     setWeatherError(null);
     setLoadingWeather(false);
   }, [placeIdKey]);
 
-  if (!isZoomedIn || (!detectedCity && !dynamicPlaceName)) {
+  if (!isZoomedIn || (!detectedCity && !dynamicPlaceName && !activeDistrict)) {
     return null;
   }
 
-  const name = detectedCity ? detectedCity.name : dynamicPlaceName || 'Detected Town';
-  const state = detectedCity ? detectedCity.state : dynamicState || 'India';
-  const placeType = detectedCity ? detectedCity.placeType : 'Town / Municipal Area';
-  const elevation = detectedCity ? `${detectedCity.elevationMeters}m ASL` : 'Live Terrain Zone';
+  const name =
+    activeDistrict?.districtName ||
+    (detectedCity ? detectedCity.name : dynamicPlaceName || 'Detected Area');
+
+  const state =
+    activeDistrict?.stateName ||
+    (detectedCity ? detectedCity.state : dynamicState || 'India');
+
+  const locality = activeDistrict?.locality;
+
+  const placeType = detectedCity ? detectedCity.placeType : 'District Reticle Area';
+  const elevation = detectedCity ? `${detectedCity.elevationMeters}m ASL` : 'Live Center Target (+)';
 
   const populationEstimate = detectedCity
     ? detectedCity.populationEstimate
     : zoomLevel >= 11
-    ? '~120,000 - 350,000'
-    : '~500,000+';
+    ? '~250,000 - 1.2 Million'
+    : '~1.5 - 4.0 Million';
 
   const detectionLevel = getAdministrativeDetectionLevel(zoomLevel);
 
-  const coords: [number, number] = detectedCity
+  const coords: [number, number] = activeDistrict
+    ? activeDistrict.coordinates
+    : detectedCity
     ? detectedCity.coordinates
     : dynamicCoords || [20.5937, 78.9629];
 
@@ -90,15 +107,15 @@ export function CityDetectedPanel({
       data-testid="city-detected-panel"
       className="absolute top-32 left-4 z-[1000] w-80 max-w-[calc(100vw-32px)] transition-all duration-300 ease-out animate-in fade-in slide-in-from-top-3"
     >
-      <div className="relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-slate-950/95 backdrop-blur-2xl shadow-2xl shadow-black/90 p-4 text-slate-100">
+      <div className="relative overflow-hidden rounded-2xl border border-emerald-500/40 bg-slate-950/95 backdrop-blur-2xl shadow-2xl shadow-black/90 p-4 text-slate-100">
         {/* Glow Accent Top Bar */}
         <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-400 via-teal-400 to-amber-400" />
 
         {/* Status indicator badge */}
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest text-emerald-400">
-            <span className="inline-block h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-            BASERA GEOSPATIAL LAYER
+            <Crosshair className="h-3 w-3 text-emerald-400 animate-spin-slow" />
+            BASERA TARGET LAYER (+)
           </div>
           <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-slate-300 font-mono">
             {elevation}
@@ -111,7 +128,7 @@ export function CityDetectedPanel({
           <span>Level: {detectionLevel} ({placeType})</span>
         </div>
 
-        {/* City / Town Name */}
+        {/* District / City Name */}
         <h2
           data-testid="detected-city-name"
           className="text-2xl font-black tracking-tight text-white flex items-center gap-2 truncate"
@@ -119,7 +136,7 @@ export function CityDetectedPanel({
           {name}
         </h2>
 
-        {/* State / District */}
+        {/* State / Locality under + */}
         <p
           data-testid="detected-city-state"
           className="text-xs text-slate-300 flex items-center gap-1.5 mt-0.5 truncate"
@@ -127,9 +144,17 @@ export function CityDetectedPanel({
           <MapPin className="h-3.5 w-3.5 text-teal-400 shrink-0" />
           <span>
             {state}
-            {detectedCity?.district ? ` • ${detectedCity.district}` : ''}
+            {locality ? ` • ${locality}` : detectedCity?.district ? ` • ${detectedCity.district}` : ''}
           </span>
         </p>
+
+        {/* Exact Reticle (+) Coordinates */}
+        <div className="mt-2 text-[10px] font-mono text-slate-400 bg-white/5 px-2 py-1 rounded-lg border border-white/5 flex items-center justify-between">
+          <span>Center (+) Target:</span>
+          <span className="text-emerald-400 font-bold">
+            {coords[0].toFixed(4)}° N, {coords[1].toFixed(4)}° E
+          </span>
+        </div>
 
         {/* Estimated Population */}
         <div className="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between text-xs">
@@ -250,7 +275,7 @@ export function CityDetectedPanel({
         </div>
 
         {/* Distance / Telemetry */}
-        {detectedCity?.distanceKm !== undefined && (
+        {detectedCity?.distanceKm !== undefined && !activeDistrict && (
           <div className="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400">
             <span>Distance to center:</span>
             <strong className="text-emerald-300 font-mono">
@@ -261,7 +286,7 @@ export function CityDetectedPanel({
 
         {/* Actions */}
         <div className="mt-3 flex items-center gap-2">
-          {detectedCity && onCenterCity && (
+          {detectedCity && onCenterCity && !activeDistrict && (
             <button
               onClick={() => onCenterCity(detectedCity.coordinates[0], detectedCity.coordinates[1])}
               className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white text-xs font-bold transition-all shadow-md shadow-emerald-500/20"
@@ -273,10 +298,10 @@ export function CityDetectedPanel({
           {onResetView && (
             <button
               onClick={onResetView}
-              className="flex items-center justify-center gap-1 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-semibold transition-all border border-white/10"
+              className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-semibold transition-all border border-white/10"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              India
+              Reset India View
             </button>
           )}
         </div>

@@ -10,7 +10,13 @@ import {
   ChevronRight,
   ShieldCheck
 } from 'lucide-react';
-import { searchDynamicPlaces, NominatimSearchResult, fetchDynamicCityInfo } from '../services/dynamicCityService';
+import {
+  searchDynamicPlaces,
+  NominatimSearchResult,
+  fetchDynamicCityInfo,
+  fetchDistrictAtCoordinates,
+  DistrictReticleInfo
+} from '../services/dynamicCityService';
 import {
   detectCityAtCoordinates,
   DetectedPlace,
@@ -48,8 +54,9 @@ export default function IndiaTerrainMap() {
   const [results, setResults] = useState<NominatimSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
 
-  // Geospatial layer detected place state
+  // Geospatial layer detected place & district reticle state
   const [detectedCity, setDetectedCity] = useState<DetectedPlace | null>(null);
+  const [activeDistrict, setActiveDistrict] = useState<DistrictReticleInfo | null>(null);
   const [dynamicPlaceName, setDynamicPlaceName] = useState<string | undefined>(undefined);
   const [dynamicStateName, setDynamicStateName] = useState<string | undefined>(undefined);
   const [dynamicCoords, setDynamicCoords] = useState<[number, number] | null>(null);
@@ -70,20 +77,26 @@ export default function IndiaTerrainMap() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Debounced dynamic fallback for towns not in local index
-  const checkDynamicCityFallback = useCallback(async (lat: number, lng: number, zoom: number) => {
+  // Debounced dynamic fallback for district / town under Center Reticle (+)
+  const checkDynamicTargetFallback = useCallback(async (lat: number, lng: number, zoom: number) => {
     if (zoom < CITY_ZOOM_THRESHOLD) {
+      setActiveDistrict(null);
       setDynamicPlaceName(undefined);
       setDynamicStateName(undefined);
       setDynamicCoords(null);
       return;
     }
     try {
-      const info = await fetchDynamicCityInfo(lat, lng);
-      if (info && info.name && info.name !== 'Unknown Terrain Location') {
-        setDynamicPlaceName(info.name);
-        setDynamicStateName(info.state);
-        setDynamicCoords([lat, lng]);
+      const districtInfo = await fetchDistrictAtCoordinates(lat, lng);
+      if (districtInfo) {
+        setActiveDistrict(districtInfo);
+      } else {
+        const info = await fetchDynamicCityInfo(lat, lng);
+        if (info && info.name && info.name !== 'Unknown Terrain Location') {
+          setDynamicPlaceName(info.name);
+          setDynamicStateName(info.state);
+          setDynamicCoords([lat, lng]);
+        }
       }
     } catch (err) {
       console.warn('Geospatial fallback error:', err);
@@ -127,17 +140,18 @@ export default function IndiaTerrainMap() {
       const center = map.getCenter();
       setZoomLevel(currentZoom);
 
-      // Geospatial city detection layer check
+      // Local city detection check
       const localDetected = detectCityAtCoordinates(center.lat, center.lng, currentZoom);
       setDetectedCity(localDetected);
 
-      // If local detection didn't find a place but we're zoomed in, query dynamic Nominatim fallback
+      // Debounced lookup for District under Center Reticle (+)
       clearTimeout(debounceTimer);
-      if (currentZoom >= CITY_ZOOM_THRESHOLD && !localDetected) {
+      if (currentZoom >= CITY_ZOOM_THRESHOLD) {
         debounceTimer = setTimeout(() => {
-          checkDynamicCityFallback(center.lat, center.lng, currentZoom);
+          checkDynamicTargetFallback(center.lat, center.lng, currentZoom);
         }, 350);
       } else {
+        setActiveDistrict(null);
         setDynamicPlaceName(undefined);
         setDynamicStateName(undefined);
         setDynamicCoords(null);
@@ -147,7 +161,7 @@ export default function IndiaTerrainMap() {
     map.on('move', handleMoveOrZoom);
     map.on('zoom', handleMoveOrZoom);
 
-    // Click anywhere on map to smoothly pan/zoom toward it only if inside India
+    // Click anywhere on map inside India to smoothly pan/zoom center reticle (+) toward it
     map.on('click', (e: L.LeafletMouseEvent) => {
       if (isCoordinateWithinIndiaBounds(e.latlng.lat, e.latlng.lng)) {
         map.flyTo([e.latlng.lat, e.latlng.lng], Math.max(map.getZoom(), 11), {
@@ -161,7 +175,7 @@ export default function IndiaTerrainMap() {
       map.remove();
       mapInstanceRef.current = null;
     };
-  }, [checkDynamicCityFallback]);
+  }, [checkDynamicTargetFallback]);
 
   const isZoomedInCity = zoomLevel >= CITY_ZOOM_THRESHOLD;
 
@@ -170,7 +184,6 @@ export default function IndiaTerrainMap() {
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    // Helper to clean up boundary & beacon highlights
     const clearHighlights = () => {
       if (boundaryGeoJsonLayerRef.current) {
         try {
@@ -195,11 +208,17 @@ export default function IndiaTerrainMap() {
       return;
     }
 
-    const targetCoords: [number, number] | null = detectedCity
+    const targetCoords: [number, number] | null = activeDistrict
+      ? activeDistrict.coordinates
+      : detectedCity
       ? detectedCity.coordinates
       : dynamicCoords;
 
-    const targetName = detectedCity ? detectedCity.name : dynamicPlaceName;
+    const targetName = activeDistrict
+      ? activeDistrict.districtName
+      : detectedCity
+      ? detectedCity.name
+      : dynamicPlaceName;
 
     if (!targetCoords || !targetName) {
       clearHighlights();
@@ -208,7 +227,7 @@ export default function IndiaTerrainMap() {
 
     let isMounted = true;
 
-    // Fetch and render actual GeoJSON boundary borders of the place instead of a circle
+    // Fetch and render actual GeoJSON boundary borders of the District / place
     fetchPlaceGeoJSONBoundary(targetName, targetCoords[0], targetCoords[1]).then(geojson => {
       if (!isMounted || !mapInstanceRef.current) return;
       clearHighlights();
@@ -225,7 +244,6 @@ export default function IndiaTerrainMap() {
         }).addTo(map);
         boundaryGeoJsonLayerRef.current = geoLayer;
       } else {
-        // Fallback polygon border around the bounding box if GeoJSON is not returned
         const deltaLat = 0.08;
         const deltaLng = 0.08;
         const fallbackPolygonCoords: L.LatLngExpression[] = [
@@ -244,7 +262,7 @@ export default function IndiaTerrainMap() {
         boundaryGeoJsonLayerRef.current = polyLayer as any;
       }
 
-      // Add cyber beacon at center
+      // Add cyber beacon at target coordinates
       const cyberIcon = L.divIcon({
         className: 'cyber-beacon-container',
         html: `
@@ -269,7 +287,7 @@ export default function IndiaTerrainMap() {
       isMounted = false;
       clearHighlights();
     };
-  }, [isZoomedInCity, detectedCity, dynamicPlaceName, dynamicCoords]);
+  }, [isZoomedInCity, activeDistrict, detectedCity, dynamicPlaceName, dynamicCoords]);
 
   const handleFlyToCoords = (lat: number, lng: number) => {
     if (mapInstanceRef.current && isCoordinateWithinIndiaBounds(lat, lng)) {
@@ -355,8 +373,7 @@ export default function IndiaTerrainMap() {
                 <span>Dynamic Search Results</span>
                 <button
                   onClick={() => setShowDropdown(false)}
-                  className="text-emerald-4
-                  0 hover:underline"
+                  className="text-emerald-400 hover:underline"
                 >
                   Close
                 </button>
@@ -404,9 +421,24 @@ export default function IndiaTerrainMap() {
         </div>
       </div>
 
-      {/* Top Left Geospatial Detection Panel underneath Fly By strip */}
+      {/* Center Crosshair Reticle (+) pointing at the exact District */}
+      <div
+        data-testid="center-reticle-hud"
+        className="pointer-events-none absolute inset-0 flex items-center justify-center z-[850]"
+      >
+        <div className="relative flex items-center justify-center">
+          {/* Glowing Center Plus (+) */}
+          <div className="h-7 w-0.5 bg-emerald-400 shadow-[0_0_12px_#10b981]" />
+          <div className="absolute h-0.5 w-7 bg-emerald-400 shadow-[0_0_12px_#10b981]" />
+          {/* Target Radar Bracket Ring */}
+          <div className="absolute -inset-5 border border-emerald-400/40 rounded-full animate-pulse" />
+        </div>
+      </div>
+
+      {/* Top Left District / City Detected Panel underneath Fly By strip */}
       <CityDetectedPanel
         detectedCity={detectedCity}
+        activeDistrict={activeDistrict}
         dynamicPlaceName={dynamicPlaceName}
         dynamicState={dynamicStateName}
         isZoomedIn={isZoomedInCity}

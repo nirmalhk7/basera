@@ -47,6 +47,26 @@ describe('CityDetectedPanel Component', () => {
     expect(screen.getByTestId('fetch-weather-btn')).toBeInTheDocument();
   });
 
+  it('should render exact District reticle card when activeDistrict is provided', () => {
+    render(
+      <CityDetectedPanel
+        detectedCity={null}
+        activeDistrict={{
+          districtName: 'Pune District',
+          stateName: 'Maharashtra',
+          locality: 'Shivajinagar',
+          coordinates: [18.5204, 73.8567]
+        }}
+        isZoomedIn={true}
+        zoomLevel={11}
+      />
+    );
+
+    expect(screen.getByTestId('detected-city-name')).toHaveTextContent('Pune District');
+    expect(screen.getByTestId('detected-city-state')).toHaveTextContent(/Maharashtra/i);
+    expect(screen.getByText(/Center \(\+\) Target:/i)).toBeInTheDocument();
+  });
+
   it('should fetch live weather only when the user clicks Fetch Live Weather button', async () => {
     const fetchSpy = vi.spyOn(weatherService, 'fetchLiveWeather').mockResolvedValue({
       currentTemp: 31,
@@ -69,7 +89,6 @@ describe('CityDetectedPanel Component', () => {
       />
     );
 
-    // Click the on-demand button
     const btn = screen.getByTestId('fetch-weather-btn');
     fireEvent.click(btn);
 

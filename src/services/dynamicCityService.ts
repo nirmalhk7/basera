@@ -188,3 +188,48 @@ export async function fetchDynamicCityInfo(lat: number, lng: number): Promise<Dy
     weather
   };
 }
+
+export interface DistrictReticleInfo {
+  districtName: string;
+  stateName: string;
+  locality?: string;
+  coordinates: [number, number];
+}
+
+/**
+ * Fast reverse geocode for the center reticle (+) to identify exact District under crosshair
+ */
+export async function fetchDistrictAtCoordinates(lat: number, lng: number): Promise<DistrictReticleInfo | null> {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat.toFixed(
+      5
+    )}&lon=${lng.toFixed(5)}&zoom=10&addressdetails=1`;
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'BaseraIndiaMap/1.0'
+      }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const addr = data.address || {};
+    const districtName =
+      addr.state_district ||
+      addr.county ||
+      addr.district ||
+      addr.city ||
+      addr.town ||
+      'Indian District';
+    const stateName = addr.state || 'India';
+    const locality = addr.suburb || addr.neighbourhood || addr.city_district || addr.town;
+
+    return {
+      districtName,
+      stateName,
+      locality,
+      coordinates: [lat, lng]
+    };
+  } catch (err) {
+    console.warn('District reticle fetch error:', err);
+    return null;
+  }
+}
