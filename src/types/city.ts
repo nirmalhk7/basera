@@ -17,6 +17,8 @@ export interface DynamicCityInfo {
   planning_authority?: string;
   town_planner_jurisdiction?: string;
   geoJsonBoundary?: any;
+  planning_documents?: { title: string; url: string }[];
+  search_documents_url?: string;
   wikiSummary?: {
     extract: string;
     title: string;

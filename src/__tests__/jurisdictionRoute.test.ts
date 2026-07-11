@@ -70,6 +70,9 @@ describe('/api/jurisdiction Route Handler', () => {
     expect(data.found).toBe(true);
     expect(data.properties.name_en).toBe('Mumbai Jurisdiction');
     expect(data.properties.planning_authority).toBe('Mumbai Metropolitan Region Development Authority');
+    expect(data.properties.planning_documents).toBeDefined();
+    expect(Array.isArray(data.properties.planning_documents)).toBe(true);
+    expect(data.properties.search_documents_url).toContain('google.com/search');
   });
 
   it('should match nearest Point jurisdiction if coordinate is within 15km and no polygon matches', async () => {

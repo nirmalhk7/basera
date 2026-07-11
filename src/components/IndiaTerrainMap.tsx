@@ -462,6 +462,8 @@ export default function IndiaTerrainMap() {
         statePlanningWebsite={dynamicCityInfo?.state_planning_website}
         statePlanningEmail={dynamicCityInfo?.state_planning_email}
         planningAuthority={dynamicCityInfo?.planning_authority}
+        planningDocuments={dynamicCityInfo?.planning_documents}
+        searchDocumentsUrl={dynamicCityInfo?.search_documents_url}
       />
 
       {/* Quick Fly Cities Strip below top bar at top-20 */}
