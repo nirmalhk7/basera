@@ -24,6 +24,9 @@ export interface NominatimSearchResult {
     city?: string;
     town?: string;
     village?: string;
+    suburb?: string;
+    municipality?: string;
+    city_district?: string;
     state?: string;
     state_district?: string;
     county?: string;
@@ -32,67 +35,62 @@ export interface NominatimSearchResult {
 }
 
 /**
- * Dynamically searches strictly for administrative districts in India using OpenStreetMap Nominatim API
+ * Dynamically searches for local administrative places (City/Town/Village) in India using OpenStreetMap Nominatim API
  */
 export async function searchDynamicPlaces(query: string): Promise<NominatimSearchResult[]> {
   if (!query || query.trim().length < 2) return [];
   try {
-    const cleanQuery = query.toLowerCase().includes('district')
-      ? query.trim()
-      : `${query.trim()} district`;
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
+    const cleanQuery = query.trim();
+    const url = `/api/nominatim?path=search&q=${encodeURIComponent(
       cleanQuery + ', India'
     )}&countrycodes=in&format=jsonv2&limit=15&addressdetails=1`;
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'BaseraIndiaMap/1.0'
-      }
-    });
+    const res = await fetch(url);
     if (!res.ok) return [];
     const rawData: NominatimSearchResult[] = await res.json();
 
-    // Strictly filter for administrative districts
-    const districtResults = rawData.filter(item => {
+    // Filter for administrative places or towns/cities/villages
+    const localResults = rawData.filter(item => {
       const addrType = (item.addresstype || '').toLowerCase();
-      const disp = (item.display_name || '').toLowerCase();
-      const addr = item.address || {};
-      const isDistrictType =
-        addrType === 'district' ||
-        addrType === 'state_district' ||
+      return (
+        addrType === 'city' ||
+        addrType === 'town' ||
+        addrType === 'village' ||
+        addrType === 'municipality' ||
+        addrType === 'administrative' ||
+        addrType === 'suburb' ||
         addrType === 'county' ||
-        disp.includes('district');
-      return isDistrictType;
+        addrType === 'district'
+      );
     });
 
-    // Deduplicate and ensure clean district naming
+    // Deduplicate and ensure clean naming
     const seenNames = new Set<string>();
-    const cleanDistricts: NominatimSearchResult[] = [];
+    const cleanPlaces: NominatimSearchResult[] = [];
 
-    for (const item of districtResults) {
+    for (const item of localResults) {
       const addr = item.address || {};
       const baseName =
-        addr.state_district ||
-        addr.district ||
-        addr.county ||
+        addr.village ||
+        addr.town ||
+        addr.city ||
+        addr.suburb ||
+        addr.municipality ||
         item.name ||
         item.display_name.split(',')[0];
-      const normalizedName = baseName.toLowerCase().includes('district')
-        ? baseName
-        : `${baseName} District`;
 
-      const key = normalizedName.toLowerCase();
+      const key = baseName.toLowerCase();
       if (!seenNames.has(key)) {
         seenNames.add(key);
         const stateName = addr.state || 'India';
-        cleanDistricts.push({
+        cleanPlaces.push({
           ...item,
-          name: normalizedName,
-          display_name: `${normalizedName}, ${stateName}`
+          name: baseName,
+          display_name: `${baseName}, ${stateName}`
         });
       }
     }
 
-    return cleanDistricts.slice(0, 8);
+    return cleanPlaces.slice(0, 8);
   } catch (err) {
     console.error('Nominatim strict district search error:', err);
     return [];
@@ -103,36 +101,56 @@ export async function searchDynamicPlaces(query: string): Promise<NominatimSearc
  * Dynamically fetches rich city/place information for ANY latitude & longitude in India
  */
 export async function fetchDynamicCityInfo(lat: number, lng: number): Promise<DynamicCityInfo> {
-  // 1. Fetch Reverse Geocoding from OpenStreetMap Nominatim
+  // 1. Fetch Reverse Geocoding from OpenStreetMap Nominatim at Local Scale (zoom=14)
   let name = 'Unknown Terrain Location';
   let state = 'India';
   let district: string | undefined = undefined;
   let placeType = 'Terrain Zone';
+  let rawLocalityName = '';
   let population: number | undefined = undefined;
 
   try {
-    const nominatimUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat.toFixed(
+    const nominatimUrl = `/api/nominatim?path=reverse&format=jsonv2&lat=${lat.toFixed(
       5
-    )}&lon=${lng.toFixed(5)}&zoom=10&addressdetails=1&extratags=1`;
-    const nomRes = await fetch(nominatimUrl, {
-      headers: {
-        'User-Agent': 'IndiaTerrainExplorerApp/1.0'
-      }
-    });
+    )}&lon=${lng.toFixed(5)}&zoom=14&addressdetails=1&extratags=1`;
+    const nomRes = await fetch(nominatimUrl);
     if (nomRes.ok) {
       const nomData = await nomRes.json();
       const addr = nomData.address || {};
-      name =
-        addr.city ||
-        addr.town ||
-        addr.municipality ||
-        addr.county ||
-        addr.state_district ||
-        nomData.name ||
-        'Indian City Area';
+
+      // Determine the most localized governance entity for Town Planner detection
+      if (addr.village) {
+        rawLocalityName = addr.village;
+        name = `${addr.village} Gram Panchayat`;
+        placeType = 'Gram Panchayat';
+      } else if (addr.town) {
+        rawLocalityName = addr.town;
+        name = `${addr.town} Municipal Council`;
+        placeType = 'Municipal Council';
+      } else if (addr.city) {
+        rawLocalityName = addr.city;
+        name = `${addr.city} Municipal Corporation`;
+        placeType = 'Municipal Corporation';
+      } else if (addr.suburb || addr.city_district) {
+        rawLocalityName = addr.suburb || addr.city_district;
+        name = `${rawLocalityName} Zonal Planner`;
+        placeType = 'Ward/Zonal Planner';
+      } else if (addr.county) {
+        rawLocalityName = addr.county;
+        name = `${addr.county} Tehsil Planner`;
+        placeType = 'Tehsil Planner';
+      } else if (addr.state_district) {
+        rawLocalityName = addr.state_district;
+        name = `${addr.state_district} District Planner`;
+        placeType = 'District Planner';
+      } else {
+        rawLocalityName = nomData.name || 'Local Authority';
+        name = nomData.name || 'Local Authority';
+        placeType = 'Local Authority';
+      }
+
       state = addr.state || 'India';
       district = addr.state_district || addr.county;
-      placeType = addr.city ? 'City' : addr.town ? 'Town' : addr.village ? 'Village' : 'Urban Region';
 
       if (nomData.extratags && nomData.extratags.population) {
         const parsedPop = parseInt(nomData.extratags.population, 10);
@@ -228,6 +246,7 @@ export async function fetchDynamicCityInfo(lat: number, lng: number): Promise<Dy
 
   return {
     name,
+    rawLocalityName,
     state,
     district,
     country: 'India',

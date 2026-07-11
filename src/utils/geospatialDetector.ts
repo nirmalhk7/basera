@@ -427,24 +427,26 @@ export function estimateMonthlyClimate(lat: number, elevationMeters: number = 50
 }
 
 /**
- * Fetch actual GeoJSON boundary polygon of a place from OpenStreetMap Nominatim API
+ * Fetch actual GeoJSON boundary polygon of a place/district from OpenStreetMap Nominatim API
  */
 export async function fetchPlaceGeoJSONBoundary(placeName: string, lat: number, lon: number): Promise<any | null> {
   try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
+    // We try to query exactly the provided name (e.g. "Khadki", "Pune Municipal Corporation")
+    // without forcing it to be a "district".
+    const url = `/api/nominatim?path=search&q=${encodeURIComponent(
       placeName + ', India'
-    )}&format=json&polygon_geojson=1&limit=1`;
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'BaseraIndiaMap/1.0'
-      }
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (Array.isArray(data) && data.length > 0 && data[0].geojson) {
-      const geojson = data[0].geojson;
-      if (geojson.type === 'Polygon' || geojson.type === 'MultiPolygon') {
-        return geojson;
+    )}&format=json&polygon_geojson=1&limit=3`;
+    
+    const res = await fetch(url);
+    
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        for (const item of data) {
+          if (item.geojson && (item.geojson.type === 'Polygon' || item.geojson.type === 'MultiPolygon')) {
+            return item.geojson;
+          }
+        }
       }
     }
   } catch (err) {

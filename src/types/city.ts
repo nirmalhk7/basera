@@ -1,5 +1,6 @@
 export interface DynamicCityInfo {
   name: string;
+  rawLocalityName?: string; // Exact name of the village/town/city for polygon searches
   state: string;
   district?: string;
   country: string;

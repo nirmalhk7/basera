@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { searchDynamicPlaces } from '../services/dynamicCityService';
 
-describe('searchDynamicPlaces - Strict District Search', () => {
+describe('searchDynamicPlaces - Local Town Planner Search', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn());
   });
@@ -10,16 +10,16 @@ describe('searchDynamicPlaces - Strict District Search', () => {
     vi.restoreAllMocks();
   });
 
-  it('should strictly filter and format search results to administrative districts in India', async () => {
+  it('should filter and format search results to local governance units (city, town, village, suburb) in India', async () => {
     const mockNominatimResponse = [
       {
-        display_name: 'Pune District, Maharashtra, India',
-        name: 'Pune District',
+        display_name: 'Pune, Maharashtra, India',
+        name: 'Pune',
         lat: '18.5204',
         lon: '73.8567',
-        addresstype: 'district',
+        addresstype: 'city',
         address: {
-          state_district: 'Pune District',
+          city: 'Pune',
           state: 'Maharashtra'
         }
       },
@@ -31,13 +31,13 @@ describe('searchDynamicPlaces - Strict District Search', () => {
         addresstype: 'railway'
       },
       {
-        display_name: 'Thane, Maharashtra, India',
-        name: 'Thane',
-        lat: '19.1998',
-        lon: '72.9781',
-        addresstype: 'state_district',
+        display_name: 'Khadki, Pune, Maharashtra, India',
+        name: 'Khadki',
+        lat: '18.5682',
+        lon: '73.8508',
+        addresstype: 'town',
         address: {
-          state_district: 'Thane District',
+          town: 'Khadki',
           state: 'Maharashtra'
         }
       }
@@ -50,11 +50,11 @@ describe('searchDynamicPlaces - Strict District Search', () => {
 
     const results = await searchDynamicPlaces('Pune');
 
-    // Railway station should be filtered out; Pune District and Thane District should remain and be cleanly formatted
+    // Railway station should be filtered out; City and Town should remain and be cleanly formatted
     expect(results).toHaveLength(2);
-    expect(results[0].name).toBe('Pune District');
-    expect(results[0].display_name).toBe('Pune District, Maharashtra');
-    expect(results[1].name).toBe('Thane District');
-    expect(results[1].display_name).toBe('Thane District, Maharashtra');
+    expect(results[0].name).toBe('Pune');
+    expect(results[0].display_name).toBe('Pune, Maharashtra');
+    expect(results[1].name).toBe('Khadki');
+    expect(results[1].display_name).toBe('Khadki, Maharashtra');
   });
 });

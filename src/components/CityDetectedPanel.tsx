@@ -7,7 +7,6 @@ import {
   estimateMonthlyClimate,
   MonthlyClimate
 } from '../utils/geospatialDetector';
-import { DistrictReticleInfo } from '../services/dynamicCityService';
 import {
   MapPin,
   Compass,
@@ -19,9 +18,9 @@ import {
 
 interface CityDetectedPanelProps {
   detectedCity: DetectedPlace | null;
-  activeDistrict?: DistrictReticleInfo | null;
   dynamicPlaceName?: string;
   dynamicState?: string;
+  dynamicPlaceType?: string;
   isZoomedIn: boolean;
   zoomLevel: number;
   onCenterCity?: (lat: number, lng: number) => void;
@@ -30,29 +29,27 @@ interface CityDetectedPanelProps {
 
 export function CityDetectedPanel({
   detectedCity,
-  activeDistrict,
   dynamicPlaceName,
   dynamicState,
+  dynamicPlaceType,
   isZoomedIn,
   zoomLevel,
   onCenterCity,
   onResetView
 }: CityDetectedPanelProps) {
-  if (!isZoomedIn || (!detectedCity && !dynamicPlaceName && !activeDistrict)) {
+  if (!isZoomedIn || (!detectedCity && !dynamicPlaceName)) {
     return null;
   }
 
-  const name =
-    activeDistrict?.districtName ||
-    (detectedCity ? detectedCity.name : dynamicPlaceName || 'Detected Area');
+  const name = detectedCity ? detectedCity.name : dynamicPlaceName || 'Detected Area';
 
-  const state =
-    activeDistrict?.stateName ||
-    (detectedCity ? detectedCity.state : dynamicState || 'India');
+  const state = detectedCity ? detectedCity.state : dynamicState || 'India';
 
-  const locality = activeDistrict?.locality;
+  const locality = undefined;
 
-  const placeType = detectedCity ? detectedCity.placeType : 'District Admin Zone';
+  const placeType = detectedCity
+    ? detectedCity.placeType
+    : dynamicPlaceType || 'Local Authority';
 
   const populationEstimate = detectedCity
     ? detectedCity.populationEstimate
@@ -62,16 +59,11 @@ export function CityDetectedPanel({
 
   const monthlyClimate: MonthlyClimate[] = detectedCity
     ? detectedCity.monthlyClimate
-    : estimateMonthlyClimate(
-        activeDistrict ? activeDistrict.coordinates[0] : 21.0,
-        150
-      );
+    : estimateMonthlyClimate(21.0, 150);
 
   const detectionLevel = getAdministrativeDetectionLevel(zoomLevel);
 
-  const targetCoords: [number, number] = activeDistrict
-    ? activeDistrict.coordinates
-    : detectedCity
+  const targetCoords: [number, number] = detectedCity
     ? detectedCity.coordinates
     : [20.5937, 78.9629];
 
@@ -147,7 +139,7 @@ export function CityDetectedPanel({
         </div>
 
         {/* Distance / Telemetry */}
-        {detectedCity?.distanceKm !== undefined && !activeDistrict && (
+        {detectedCity?.distanceKm !== undefined && (
           <div className="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400">
             <span>Distance to center:</span>
             <strong className="text-emerald-300 font-mono">

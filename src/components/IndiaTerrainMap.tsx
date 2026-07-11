@@ -13,10 +13,9 @@ import {
 import {
   searchDynamicPlaces,
   NominatimSearchResult,
-  fetchDynamicCityInfo,
-  fetchDistrictAtCoordinates,
-  DistrictReticleInfo
+  fetchDynamicCityInfo
 } from '../services/dynamicCityService';
+import { DynamicCityInfo } from '../types/city';
 import {
   detectCityAtCoordinates,
   DetectedPlace,
@@ -54,9 +53,9 @@ export default function IndiaTerrainMap() {
   const [results, setResults] = useState<NominatimSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
 
-  // Geospatial layer detected place & district reticle state
+  // Geospatial layer detected place & Town Planner reticle state
   const [detectedCity, setDetectedCity] = useState<DetectedPlace | null>(null);
-  const [activeDistrict, setActiveDistrict] = useState<DistrictReticleInfo | null>(null);
+  const [dynamicCityInfo, setDynamicCityInfo] = useState<DynamicCityInfo | null>(null);
   const [dynamicPlaceName, setDynamicPlaceName] = useState<string | undefined>(undefined);
   const [dynamicStateName, setDynamicStateName] = useState<string | undefined>(undefined);
   const [dynamicCoords, setDynamicCoords] = useState<[number, number] | null>(null);
@@ -78,26 +77,24 @@ export default function IndiaTerrainMap() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Debounced dynamic fallback for district / town under Center Reticle (+)
+  // Debounced dynamic fallback for Town Planner under Center Reticle (+)
   const checkDynamicTargetFallback = useCallback(async (lat: number, lng: number, zoom: number) => {
     if (zoom < CITY_ZOOM_THRESHOLD) {
-      setActiveDistrict(null);
+      setDynamicCityInfo(null);
       setDynamicPlaceName(undefined);
       setDynamicStateName(undefined);
       setDynamicCoords(null);
       return;
     }
     try {
-      const districtInfo = await fetchDistrictAtCoordinates(lat, lng);
-      if (districtInfo) {
-        setActiveDistrict(districtInfo);
+      const info = await fetchDynamicCityInfo(lat, lng);
+      if (info && info.name && info.name !== 'Unknown Terrain Location') {
+        setDynamicCityInfo(info);
+        setDynamicPlaceName(info.name);
+        setDynamicStateName(info.state);
+        setDynamicCoords([lat, lng]);
       } else {
-        const info = await fetchDynamicCityInfo(lat, lng);
-        if (info && info.name && info.name !== 'Unknown Terrain Location') {
-          setDynamicPlaceName(info.name);
-          setDynamicStateName(info.state);
-          setDynamicCoords([lat, lng]);
-        }
+        setDynamicCityInfo(null);
       }
     } catch (err) {
       console.warn('Geospatial fallback error:', err);
@@ -154,7 +151,7 @@ export default function IndiaTerrainMap() {
           checkDynamicTargetFallback(center.lat, center.lng, currentZoom);
         }, 350);
       } else {
-        setActiveDistrict(null);
+        setDynamicCityInfo(null);
         setDynamicPlaceName(undefined);
         setDynamicStateName(undefined);
         setDynamicCoords(null);
@@ -211,17 +208,13 @@ export default function IndiaTerrainMap() {
       return;
     }
 
-    const targetCoords: [number, number] | null = activeDistrict
-      ? activeDistrict.coordinates
-      : detectedCity
+    const targetCoords = detectedCity
       ? detectedCity.coordinates
       : dynamicCoords;
 
-    const targetName = activeDistrict
-      ? activeDistrict.districtName
-      : detectedCity
+    const targetName = detectedCity
       ? detectedCity.name
-      : dynamicPlaceName;
+      : dynamicCityInfo?.rawLocalityName || dynamicPlaceName;
 
     if (!targetCoords || !targetName) {
       clearHighlights();
@@ -230,67 +223,60 @@ export default function IndiaTerrainMap() {
 
     let isMounted = true;
 
-    // Fetch and render actual GeoJSON boundary borders of the District / place
-    fetchPlaceGeoJSONBoundary(targetName, targetCoords[0], targetCoords[1]).then(geojson => {
-      if (!isMounted || !mapInstanceRef.current) return;
-      clearHighlights();
+    // Removed the instant square polygon to prevent ugly fallbacks.
+    // The cyber beacon will still provide instant visual feedback while the true boundary loads.
 
-      if (geojson) {
+    const cyberIcon = L.divIcon({
+      className: 'cyber-beacon-container',
+      html: `
+        <div class="cyber-beacon-pulse">
+          <div class="cyber-beacon-ring"></div>
+          <div class="cyber-beacon-core"></div>
+        </div>
+      `,
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+    const beacon = L.marker(targetCoords, {
+      icon: cyberIcon,
+      interactive: false
+    }).addTo(map);
+    highlightBeaconRef.current = beacon;
+
+    // Fetch and render actual exact administrative GeoJSON boundary borders of the District
+    // Added 1200ms delay to respect Nominatim's 1 req/sec strict rate limit, as this is fired
+    // right after reverse geocoding completes.
+    const fetchTimer = setTimeout(() => {
+      fetchPlaceGeoJSONBoundary(targetName, targetCoords[0], targetCoords[1]).then(geojson => {
+        if (!isMounted || !mapInstanceRef.current) return;
+
+        if (geojson) {
+        try {
+          if (boundaryGeoJsonLayerRef.current && map.hasLayer(boundaryGeoJsonLayerRef.current)) {
+            map.removeLayer(boundaryGeoJsonLayerRef.current);
+          }
+        } catch (e) {}
+
         const geoLayer = L.geoJSON(geojson, {
           style: {
             color: '#10b981',
             weight: 2.8,
             dashArray: '6, 4',
             fillColor: '#10b981',
-            fillOpacity: 0.14
+            fillOpacity: 0.15
           }
         }).addTo(map);
         boundaryGeoJsonLayerRef.current = geoLayer;
-      } else {
-        const deltaLat = 0.08;
-        const deltaLng = 0.08;
-        const fallbackPolygonCoords: L.LatLngExpression[] = [
-          [targetCoords[0] - deltaLat, targetCoords[1] - deltaLng],
-          [targetCoords[0] - deltaLat, targetCoords[1] + deltaLng],
-          [targetCoords[0] + deltaLat, targetCoords[1] + deltaLng],
-          [targetCoords[0] + deltaLat, targetCoords[1] - deltaLng]
-        ];
-        const polyLayer = L.polygon(fallbackPolygonCoords, {
-          color: '#10b981',
-          weight: 2.5,
-          dashArray: '6, 4',
-          fillColor: '#10b981',
-          fillOpacity: 0.1
-        }).addTo(map);
-        boundaryGeoJsonLayerRef.current = polyLayer as any;
       }
-
-      // Add cyber beacon at target coordinates
-      const cyberIcon = L.divIcon({
-        className: 'cyber-beacon-container',
-        html: `
-          <div class="cyber-beacon-pulse">
-            <div class="cyber-beacon-ring"></div>
-            <div class="cyber-beacon-core"></div>
-          </div>
-        `,
-        iconSize: [24, 24],
-        iconAnchor: [12, 12]
-      });
-
-      const beacon = L.marker(targetCoords, {
-        icon: cyberIcon,
-        interactive: false
-      }).addTo(map);
-
-      highlightBeaconRef.current = beacon;
     });
+    }, 1200);
 
     return () => {
       isMounted = false;
+      clearTimeout(fetchTimer);
       clearHighlights();
     };
-  }, [isZoomedInCity, activeDistrict, detectedCity, dynamicPlaceName, dynamicCoords]);
+  }, [isZoomedInCity, dynamicCityInfo, detectedCity, dynamicPlaceName, dynamicCoords]);
 
   const handleFlyToCoords = (lat: number, lng: number) => {
     if (mapInstanceRef.current && isCoordinateWithinIndiaBounds(lat, lng)) {
@@ -351,7 +337,7 @@ export default function IndiaTerrainMap() {
             )}
             <input
               type="text"
-              placeholder="Search any district in India..."
+              placeholder="Search any town, city, or village..."
               value={searchQuery}
               onChange={e => {
                 setSearchQuery(e.target.value);
@@ -439,9 +425,9 @@ export default function IndiaTerrainMap() {
       {/* Top Left District / City Detected Panel underneath Fly By strip */}
       <CityDetectedPanel
         detectedCity={detectedCity}
-        activeDistrict={activeDistrict}
         dynamicPlaceName={dynamicPlaceName}
         dynamicState={dynamicStateName}
+        dynamicPlaceType={dynamicCityInfo?.placeType}
         isZoomedIn={isZoomedInCity}
         zoomLevel={zoomLevel}
         onCenterCity={handleFlyToCoords}

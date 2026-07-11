@@ -60,22 +60,19 @@ describe('CityDetectedPanel Component', () => {
     expect(screen.getByText('Jan')).toBeInTheDocument();
   });
 
-  it('should render exact District reticle card without Center Target coordinates or Basera Target header', () => {
+  it('should render exact Town Planner reticle card without Center Target coordinates or Basera Target header', () => {
     render(
       <CityDetectedPanel
         detectedCity={null}
-        activeDistrict={{
-          districtName: 'Pune District',
-          stateName: 'Maharashtra',
-          locality: 'Shivajinagar',
-          coordinates: [18.5204, 73.8567]
-        }}
+        dynamicPlaceName="Pune Municipal Corporation"
+        dynamicState="Maharashtra"
+        dynamicPlaceType="Municipal Corporation"
         isZoomedIn={true}
         zoomLevel={11}
       />
     );
 
-    expect(screen.getByTestId('detected-city-name')).toHaveTextContent('Pune District');
+    expect(screen.getByTestId('detected-city-name')).toHaveTextContent('Pune Municipal Corporation');
     expect(screen.getByTestId('detected-city-state')).toHaveTextContent(/Maharashtra/i);
     expect(screen.queryByText(/Center \(\+\) Target/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/BASERA TARGET LAYER/i)).not.toBeInTheDocument();
