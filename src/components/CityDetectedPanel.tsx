@@ -35,7 +35,9 @@ interface CityDetectedPanelProps {
   statePlanningEmail?: string;
   planningAuthority?: string;
   planningDocuments?: { title: string; url: string }[];
+  statePlanningPortal?: string;
   searchDocumentsUrl?: string;
+  searchDocumentsDdgUrl?: string;
 }
 
 export function CityDetectedPanel({
@@ -54,7 +56,9 @@ export function CityDetectedPanel({
   statePlanningEmail,
   planningAuthority,
   planningDocuments,
-  searchDocumentsUrl
+  statePlanningPortal,
+  searchDocumentsUrl,
+  searchDocumentsDdgUrl
 }: CityDetectedPanelProps) {
   if (!isZoomedIn || (!detectedCity && !dynamicPlaceName)) {
     return null;
@@ -185,14 +189,16 @@ export function CityDetectedPanel({
                   )}
                 </div>
               )}
-              {/* Curated Master Plan PDF Documents and Deep-Search URL */}
-              {((planningDocuments && planningDocuments.length > 0) || searchDocumentsUrl) && (
+              {/* Curated Master Plan PDF Documents, State Portals and Deep-Searches */}
+              {((planningDocuments && planningDocuments.length > 0) || statePlanningPortal || searchDocumentsUrl || searchDocumentsDdgUrl) && (
                 <div className="pt-2 mt-1.5 border-t border-white/5 space-y-1.5">
                   <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider mb-1 flex items-center gap-1">
                     <FileText className="h-3.5 w-3.5 text-teal-400" />
                     Planning Documents (PDFs)
                   </div>
-                  {planningDocuments && planningDocuments.length > 0 ? (
+                  
+                  {/* Curated direct PDFs */}
+                  {planningDocuments && planningDocuments.length > 0 && (
                     <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
                       {planningDocuments.map((doc, idx) => (
                         <a
@@ -200,7 +206,7 @@ export function CityDetectedPanel({
                           href={doc.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 text-[11px] text-emerald-300 hover:text-emerald-200 hover:underline bg-white/5 px-2 py-1 rounded border border-white/5 hover:border-emerald-500/20 transition-all font-medium"
+                          className="flex items-center gap-1.5 text-[11px] text-emerald-300 hover:text-emerald-200 hover:underline bg-white/5 px-2 py-1.5 rounded border border-white/5 hover:border-emerald-500/20 transition-all font-medium"
                         >
                           <FileText className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
                           <span className="truncate">{doc.title}</span>
@@ -208,20 +214,48 @@ export function CityDetectedPanel({
                         </a>
                       ))}
                     </div>
-                  ) : (
-                    <div className="text-[10px] text-slate-400 italic px-1">No curated plans in index</div>
                   )}
-                  {searchDocumentsUrl && (
+
+                  {/* State planning portal link */}
+                  {statePlanningPortal && (
                     <a
-                      href={searchDocumentsUrl}
+                      href={statePlanningPortal}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 hover:text-teal-200 text-[10px] font-semibold transition-all border border-teal-500/15"
+                      className="flex items-center gap-1.5 text-[11px] text-teal-300 hover:text-teal-200 hover:underline bg-white/5 px-2 py-1.5 rounded border border-teal-500/10 hover:border-teal-500/30 transition-all font-medium"
                     >
-                      <Search className="h-3 w-3" />
-                      Search Master Plan PDFs
-                      <ExternalLink className="h-2.5 w-2.5" />
+                      <Layers className="h-3.5 w-3.5 shrink-0 text-teal-400" />
+                      <span className="truncate">State Notified Plans Portal ({state || 'DTCP'})</span>
+                      <ExternalLink className="h-2.5 w-2.5 ml-auto text-slate-400" />
                     </a>
+                  )}
+
+                  {/* Deep search fallbacks */}
+                  {(searchDocumentsUrl || searchDocumentsDdgUrl) && (
+                    <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                      {searchDocumentsUrl && (
+                        <a
+                          href={searchDocumentsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-emerald-500/5 hover:bg-emerald-500/15 text-emerald-300 hover:text-emerald-200 text-[10px] font-bold transition-all border border-emerald-500/10 text-center"
+                        >
+                          <Search className="h-3 w-3 shrink-0" />
+                          <span>Google PDF Search</span>
+                        </a>
+                      )}
+                      {searchDocumentsDdgUrl && (
+                        <a
+                          href={searchDocumentsDdgUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-teal-500/5 hover:bg-teal-500/15 text-teal-300 hover:text-teal-200 text-[10px] font-bold transition-all border border-teal-500/10 text-center"
+                        >
+                          <Search className="h-3 w-3 shrink-0" />
+                          <span>DDG PDF Search</span>
+                        </a>
+                      )}
+                    </div>
                   )}
                 </div>
               )}

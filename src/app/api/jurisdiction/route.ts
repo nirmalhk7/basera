@@ -149,6 +149,28 @@ const CURATED_PLANNING_DOCS: Record<string, { title: string; url: string }[]> = 
   ]
 };
 
+// State-level direct notified master plans portals directory
+const STATE_MASTER_PLAN_PORTALS: Record<string, string> = {
+  "Maharashtra": "https://dtp.maharashtra.gov.in/en/acts-rules-acts-rules-notified-development-plans",
+  "Karnataka": "https://tcp.karnataka.gov.in/",
+  "Tamil Nadu": "https://www.dtcp.tn.gov.in/master-plans",
+  "Haryana": "https://tcpharyana.gov.in/developmentplans",
+  "Uttar Pradesh": "http://uptcp.gov.in/masterplans",
+  "Gujarat": "https://townplanning.gujarat.gov.in/",
+  "Telangana": "https://dtcp.telangana.gov.in/",
+  "Andhra Pradesh": "http://dtcp.ap.gov.in/",
+  "Kerala": "http://www.townplanning.kerala.gov.in/pages/masterplans.html",
+  "West Bengal": "https://udma.wb.gov.in/",
+  "Rajasthan": "https://townplanning.rajasthan.gov.in/",
+  "Madhya Pradesh": "https://mptownplan.gov.in/developmentplans/",
+  "Punjab": "https://www.puda.gov.in/",
+  "Assam": "https://tcp.assam.gov.in/",
+  "Himachal Pradesh": "https://tcp.hp.gov.in/development-plans",
+  "Uttarakhand": "https://tcpd.uk.gov.in/",
+  "Goa": "https://www.tcp.goa.gov.in/regional-plan-goa-2021",
+  "Puducherry": "https://tcpd.py.gov.in/"
+};
+
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const latStr = url.searchParams.get('lat');
@@ -235,17 +257,24 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Construct search fallback URL
+    // State level portal lookup
+    const stateName = bestMatch.properties.state || '';
+    const statePlanningPortal = STATE_MASTER_PLAN_PORTALS[stateName] || '';
+
+    // Construct search fallback URL (Google & DuckDuckGo)
     const authorityName = bestMatch.properties.planning_authority || nameEn;
     const searchQuery = `${authorityName} master plan development plan filetype:pdf`;
     const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
+    const searchDdgUrl = `https://duckduckgo.com/?q=${encodeURIComponent(searchQuery)}`;
 
     return NextResponse.json({
       found: true,
       properties: {
         ...bestMatch.properties,
         planning_documents: curatedDocs,
-        search_documents_url: searchUrl
+        state_planning_portal: statePlanningPortal,
+        search_documents_url: searchUrl,
+        search_documents_ddg_url: searchDdgUrl
       },
       geometry: bestMatch.geometry
     });

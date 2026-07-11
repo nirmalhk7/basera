@@ -111,7 +111,9 @@ export async function fetchDynamicCityInfo(lat: number, lng: number): Promise<Dy
   let town_planner_jurisdiction: string | undefined = undefined;
   let geoJsonBoundary: any = undefined;
   let planning_documents: { title: string; url: string }[] | undefined = undefined;
+  let state_planning_portal: string | undefined = undefined;
   let search_documents_url: string | undefined = undefined;
+  let search_documents_ddg_url: string | undefined = undefined;
 
   let name = 'Unknown Terrain Location';
   let state = 'India';
@@ -136,7 +138,9 @@ export async function fetchDynamicCityInfo(lat: number, lng: number): Promise<Dy
         town_planner_jurisdiction = props.town_planner_jurisdiction;
         geoJsonBoundary = jurData.geometry;
         planning_documents = props.planning_documents;
+        state_planning_portal = props.state_planning_portal;
         search_documents_url = props.search_documents_url;
+        search_documents_ddg_url = props.search_documents_ddg_url;
         
         if (props.name_en) {
           name = props.name_en;
@@ -308,7 +312,9 @@ export async function fetchDynamicCityInfo(lat: number, lng: number): Promise<Dy
     town_planner_jurisdiction,
     geoJsonBoundary,
     planning_documents,
-    search_documents_url
+    state_planning_portal,
+    search_documents_url,
+    search_documents_ddg_url
   };
 }
 
