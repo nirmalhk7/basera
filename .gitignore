@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+ 
+ # gitignore custom
+ .overpass_cache.json
+ .nominatim_progress.json
