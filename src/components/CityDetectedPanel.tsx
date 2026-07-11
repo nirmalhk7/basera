@@ -25,6 +25,12 @@ interface CityDetectedPanelProps {
   zoomLevel: number;
   onCenterCity?: (lat: number, lng: number) => void;
   onResetView?: () => void;
+  website?: string;
+  statePlanningDirectorate?: string;
+  townPlannerDesignation?: string;
+  statePlanningWebsite?: string;
+  statePlanningEmail?: string;
+  planningAuthority?: string;
 }
 
 export function CityDetectedPanel({
@@ -35,7 +41,13 @@ export function CityDetectedPanel({
   isZoomedIn,
   zoomLevel,
   onCenterCity,
-  onResetView
+  onResetView,
+  website,
+  statePlanningDirectorate,
+  townPlannerDesignation,
+  statePlanningWebsite,
+  statePlanningEmail,
+  planningAuthority
 }: CityDetectedPanelProps) {
   if (!isZoomedIn || (!detectedCity && !dynamicPlaceName)) {
     return null;
@@ -110,6 +122,65 @@ export function CityDetectedPanel({
           </span>
           <strong className="text-emerald-300 font-bold">{populationEstimate}</strong>
         </div>
+
+        {/* Town Planner & Jurisdiction Info */}
+        {(planningAuthority || website || townPlannerDesignation || statePlanningDirectorate) && (
+          <div className="mt-2.5 pt-2 border-t border-white/10 text-xs">
+            <span className="text-amber-300 font-semibold flex items-center gap-1.5 mb-1.5">
+              <Compass className="h-3.5 w-3.5 text-amber-300" />
+              Town Planner Jurisdiction
+            </span>
+            <div className="bg-white/5 rounded-xl p-2.5 border border-white/5 space-y-1.5 text-[11px]">
+              {planningAuthority && (
+                <div>
+                  <span className="text-slate-400">Authority: </span>
+                  <strong className="text-white font-medium">{planningAuthority}</strong>
+                </div>
+              )}
+              {website && (
+                <div>
+                  <span className="text-slate-400">Website: </span>
+                  <a
+                    href={website}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-teal-300 hover:underline font-medium break-all"
+                  >
+                    {website.replace("https://", "").replace("http://", "")}
+                  </a>
+                </div>
+              )}
+              {(townPlannerDesignation || statePlanningDirectorate) && (
+                <div className="pt-1.5 mt-1.5 border-t border-white/5">
+                  <div className="text-[9px] text-slate-400 uppercase font-bold tracking-wider mb-0.5">State Planner Office</div>
+                  {townPlannerDesignation && <div className="text-white font-semibold">{townPlannerDesignation}</div>}
+                  {statePlanningDirectorate && <div className="text-slate-300 text-[10px]">{statePlanningDirectorate}</div>}
+                  {statePlanningEmail && (
+                    <div className="text-[10px] mt-0.5">
+                      <span className="text-slate-400">Email: </span>
+                      <a href={`mailto:${statePlanningEmail}`} className="text-emerald-300 hover:underline">
+                        {statePlanningEmail}
+                      </a>
+                    </div>
+                  )}
+                  {statePlanningWebsite && (
+                    <div className="text-[10px]">
+                      <span className="text-slate-400">Web: </span>
+                      <a
+                        href={statePlanningWebsite}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-emerald-300 hover:underline"
+                      >
+                        {statePlanningWebsite.replace("https://", "").replace("http://", "")}
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Monthly Climatology Grid (Jan - Dec Highs & Lows) */}
         <div className="mt-2.5 pt-2 border-t border-white/10">

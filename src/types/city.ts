@@ -9,6 +9,14 @@ export interface DynamicCityInfo {
   population?: number;
   areaEstimateSqKm?: number;
   placeType: string; // e.g., 'city', 'town', 'suburb', 'district capital'
+  website?: string;
+  state_planning_directorate?: string;
+  town_planner_designation?: string;
+  state_planning_website?: string;
+  state_planning_email?: string;
+  planning_authority?: string;
+  town_planner_jurisdiction?: string;
+  geoJsonBoundary?: any;
   wikiSummary?: {
     extract: string;
     title: string;

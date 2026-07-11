@@ -101,7 +101,16 @@ export async function searchDynamicPlaces(query: string): Promise<NominatimSearc
  * Dynamically fetches rich city/place information for ANY latitude & longitude in India
  */
 export async function fetchDynamicCityInfo(lat: number, lng: number): Promise<DynamicCityInfo> {
-  // 1. Fetch Reverse Geocoding from OpenStreetMap Nominatim at Local Scale (zoom=14)
+  // 0. Fetch planning jurisdiction details from our local GeoJSON API
+  let website: string | undefined = undefined;
+  let state_planning_directorate: string | undefined = undefined;
+  let town_planner_designation: string | undefined = undefined;
+  let state_planning_website: string | undefined = undefined;
+  let state_planning_email: string | undefined = undefined;
+  let planning_authority: string | undefined = undefined;
+  let town_planner_jurisdiction: string | undefined = undefined;
+  let geoJsonBoundary: any = undefined;
+
   let name = 'Unknown Terrain Location';
   let state = 'India';
   let district: string | undefined = undefined;
@@ -109,6 +118,36 @@ export async function fetchDynamicCityInfo(lat: number, lng: number): Promise<Dy
   let rawLocalityName = '';
   let population: number | undefined = undefined;
 
+  try {
+    const jurUrl = `/api/jurisdiction?lat=${lat.toFixed(5)}&lng=${lng.toFixed(5)}`;
+    const jurRes = await fetch(jurUrl);
+    if (jurRes.ok) {
+      const jurData = await jurRes.json();
+      if (jurData.found && jurData.properties) {
+        const props = jurData.properties;
+        website = props.website;
+        state_planning_directorate = props.state_planning_directorate;
+        town_planner_designation = props.town_planner_designation;
+        state_planning_website = props.state_planning_website;
+        state_planning_email = props.state_planning_email;
+        planning_authority = props.planning_authority;
+        town_planner_jurisdiction = props.town_planner_jurisdiction;
+        geoJsonBoundary = jurData.geometry;
+        
+        if (props.name_en) {
+          name = props.name_en;
+          rawLocalityName = props.name_en;
+        }
+        if (props.place_type) {
+          placeType = props.place_type.charAt(0).toUpperCase() + props.place_type.slice(1);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Jurisdiction lookup error:', err);
+  }
+
+  // 1. Fetch Reverse Geocoding from OpenStreetMap Nominatim at Local Scale (zoom=14)
   try {
     const nominatimUrl = `/api/nominatim?path=reverse&format=jsonv2&lat=${lat.toFixed(
       5
@@ -255,7 +294,15 @@ export async function fetchDynamicCityInfo(lat: number, lng: number): Promise<Dy
     population,
     placeType,
     wikiSummary,
-    weather
+    weather,
+    website,
+    state_planning_directorate,
+    town_planner_designation,
+    state_planning_website,
+    state_planning_email,
+    planning_authority,
+    town_planner_jurisdiction,
+    geoJsonBoundary
   };
 }
 

@@ -243,7 +243,31 @@ export default function IndiaTerrainMap() {
     }).addTo(map);
     highlightBeaconRef.current = beacon;
 
-    // Fetch and render actual exact administrative GeoJSON boundary borders of the District
+    // Use instant local GeoJSON boundary if available from local API
+    if (dynamicCityInfo?.geoJsonBoundary) {
+      try {
+        if (boundaryGeoJsonLayerRef.current && map.hasLayer(boundaryGeoJsonLayerRef.current)) {
+          map.removeLayer(boundaryGeoJsonLayerRef.current);
+        }
+      } catch (e) {}
+
+      const geoLayer = L.geoJSON(dynamicCityInfo.geoJsonBoundary, {
+        style: {
+          color: '#10b981',
+          weight: 2.8,
+          dashArray: '6, 4',
+          fillColor: '#10b981',
+          fillOpacity: 0.15
+        }
+      }).addTo(map);
+      boundaryGeoJsonLayerRef.current = geoLayer;
+      
+      return () => {
+        clearHighlights();
+      };
+    }
+
+    // Fetch and render actual exact administrative GeoJSON boundary borders of the District (fallback)
     // Added 1200ms delay to respect Nominatim's 1 req/sec strict rate limit, as this is fired
     // right after reverse geocoding completes.
     const fetchTimer = setTimeout(() => {
@@ -251,24 +275,24 @@ export default function IndiaTerrainMap() {
         if (!isMounted || !mapInstanceRef.current) return;
 
         if (geojson) {
-        try {
-          if (boundaryGeoJsonLayerRef.current && map.hasLayer(boundaryGeoJsonLayerRef.current)) {
-            map.removeLayer(boundaryGeoJsonLayerRef.current);
-          }
-        } catch (e) {}
+          try {
+            if (boundaryGeoJsonLayerRef.current && map.hasLayer(boundaryGeoJsonLayerRef.current)) {
+              map.removeLayer(boundaryGeoJsonLayerRef.current);
+            }
+          } catch (e) {}
 
-        const geoLayer = L.geoJSON(geojson, {
-          style: {
-            color: '#10b981',
-            weight: 2.8,
-            dashArray: '6, 4',
-            fillColor: '#10b981',
-            fillOpacity: 0.15
-          }
-        }).addTo(map);
-        boundaryGeoJsonLayerRef.current = geoLayer;
-      }
-    });
+          const geoLayer = L.geoJSON(geojson, {
+            style: {
+              color: '#10b981',
+              weight: 2.8,
+              dashArray: '6, 4',
+              fillColor: '#10b981',
+              fillOpacity: 0.15
+            }
+          }).addTo(map);
+          boundaryGeoJsonLayerRef.current = geoLayer;
+        }
+      });
     }, 1200);
 
     return () => {
@@ -432,6 +456,12 @@ export default function IndiaTerrainMap() {
         zoomLevel={zoomLevel}
         onCenterCity={handleFlyToCoords}
         onResetView={handleResetIndiaView}
+        website={dynamicCityInfo?.website}
+        statePlanningDirectorate={dynamicCityInfo?.state_planning_directorate}
+        townPlannerDesignation={dynamicCityInfo?.town_planner_designation}
+        statePlanningWebsite={dynamicCityInfo?.state_planning_website}
+        statePlanningEmail={dynamicCityInfo?.state_planning_email}
+        planningAuthority={dynamicCityInfo?.planning_authority}
       />
 
       {/* Quick Fly Cities Strip below top bar at top-20 */}
