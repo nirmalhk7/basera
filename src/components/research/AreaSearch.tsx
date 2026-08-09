@@ -21,6 +21,7 @@ interface AreaSearchProps {
   onSelect: (area: AreaSearchResult) => void;
   onConfirm: () => void;
   onCancel: () => void;
+  onEditBoundary: () => void;
 }
 
 function areaMeta(area: AreaSearchResult): string | null {
@@ -38,7 +39,8 @@ export function AreaSearch({
   onSearch,
   onSelect,
   onConfirm,
-  onCancel
+  onCancel,
+  onEditBoundary
 }: AreaSearchProps) {
   const [query, setQuery] = useState('');
 
@@ -133,7 +135,13 @@ export function AreaSearch({
         <div className="mt-3 rounded-lg border border-emerald-300/20 bg-emerald-300/[0.06] p-3">
           <p className="text-[10px] font-bold tracking-[0.18em] text-emerald-300 uppercase">Boundary confirmed</p>
           <p className="mt-1 text-xs font-semibold text-emerald-100">{confirmedArea.displayName}</p>
-          <p className="mt-1 text-xs leading-5 text-slate-400">Layer requests are restricted to this administrative geometry.</p>
+          <p className="mt-1 text-xs leading-5 text-slate-400">
+            {confirmedArea.boundary?.sourceType === 'official' ? 'Official' : confirmedArea.boundary?.sourceType === 'user' ? 'User-drawn' : 'Community'} boundary · {confirmedArea.boundary?.confidence ?? 'medium'} confidence.
+          </p>
+          <p className="mt-1 text-[11px] leading-5 text-slate-500">Points stay inside. Crossing lines and polygons are labelled intersects.</p>
+          <button type="button" onClick={onEditBoundary} className="mt-3 rounded-md border border-emerald-200/25 px-3 py-1.5 text-xs font-semibold text-emerald-100 hover:bg-emerald-200/10">
+            Edit boundary
+          </button>
         </div>
       ) : null}
     </section>
