@@ -220,6 +220,7 @@ export function CityInfoHUD({
 
                   {cityInfo?.wikiSummary?.thumbnailUrl && (
                     <div className="relative h-28 w-full rounded-xl overflow-hidden border border-white/10">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- remote Wikipedia media has no stable dimensions. */}
                       <img
                         src={cityInfo.wikiSummary.thumbnailUrl}
                         alt={cityInfo.name}
