@@ -1,4 +1,4 @@
-import { bboxMatchesGeometry, isAreaGeometry, isFinitePosition, isValidBbox, positionsAndSegmentsStrictlyInside, type Bbox, type Position } from "@/server/geo";
+import { bboxMatchesGeometry, classifyGeometryContainment, isAreaGeometry, isFinitePosition, isValidBbox, type Bbox, type Position } from "@/server/geo";
 import { readJsonWithByteLimit } from "@/server/http";
 import type { AreaSelection, LayerId, ResearchFeature, ResearchGeometry } from "@/types/research";
 
@@ -268,7 +268,9 @@ function normalizedFeature(
   timestamp: string | undefined,
 ): ResearchFeature | null {
   const resolved = geometryFromElement(element);
-  if (!resolved || !positionsAndSegmentsStrictlyInside(resolved.positions, areaGeometry)) return null;
+  if (!resolved) return null;
+  const containment = classifyGeometryContainment(resolved.geometry, areaGeometry);
+  if (containment === "outside") return null;
   const sourceUrl = `https://www.openstreetmap.org/${element.type}/${element.id}`;
   return {
     id: `osm:${element.type}/${element.id}`,
@@ -280,6 +282,7 @@ function normalizedFeature(
     impact: "unclear",
     explanation: elementDescription(element, layerId),
     attributes: elementAttributes(element),
+    containment,
     source: {
       name: "OpenStreetMap",
       url: sourceUrl,
@@ -297,6 +300,7 @@ function normalizedFeature(
 export type OverpassLayerQuery = {
   features: ResearchFeature[];
   osmBaseTimestamp?: string;
+  truncated: boolean;
 };
 
 function cacheKey(area: Pick<AreaSelection, "geometry" | "bbox">, layerId: CurrentOsmLayerId): string {
@@ -329,6 +333,7 @@ async function requestOverpassLayer(
   area: Pick<AreaSelection, "geometry" | "bbox">,
   layerId: CurrentOsmLayerId,
   fetcher: typeof fetch,
+  signal?: AbortSignal,
 ): Promise<OverpassLayerQuery> {
   const query = buildOverpassQuery(layerId, area.bbox);
   return withOverpassSlot(async () => {
@@ -340,17 +345,18 @@ async function requestOverpassLayer(
         "User-Agent": "Basera/0.1 (geospatial research; https://github.com/nirmalhk7/basera)",
       },
       body: `data=${encodeURIComponent(query)}`,
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(TIMEOUT_MS)]) : AbortSignal.timeout(TIMEOUT_MS),
       cache: "no-store",
     });
     if (!response.ok) throw new Error(`Overpass request failed (${response.status})`);
     const payload = await readJsonWithByteLimit(response, MAX_CONTENT_LENGTH);
     if (!isOverpassPayload(payload)) throw new Error("Overpass response has an invalid shape");
     const timestamp = typeof payload.osm3s?.timestamp_osm_base === "string" ? payload.osm3s.timestamp_osm_base : undefined;
+    const truncated = payload.elements.length >= MAX_FEATURES;
     const features = payload.elements.slice(0, MAX_FEATURES)
       .map((element) => normalizedFeature(element, layerId, area.geometry, timestamp))
       .filter((feature): feature is ResearchFeature => feature !== null);
-    return { features, osmBaseTimestamp: timestamp };
+    return { features, osmBaseTimestamp: timestamp, truncated };
   });
 }
 
@@ -358,6 +364,7 @@ export async function queryOverpassLayer(
   area: Pick<AreaSelection, "geometry" | "bbox">,
   layerId: CurrentOsmLayerId,
   fetcher: typeof fetch = fetch,
+  signal?: AbortSignal,
 ): Promise<OverpassLayerQuery> {
   if (!isLiveQueryBboxSafe(area.bbox)) throw new Error("Selected area bounding box is invalid or too large for a live Overpass query");
   if (!isAreaGeometry(area.geometry)) {
@@ -366,14 +373,14 @@ export async function queryOverpassLayer(
   if (!bboxMatchesGeometry(area.bbox, area.geometry)) {
     throw new Error("Selected area bounding box does not match its geometry");
   }
-  if (fetcher !== fetch) return requestOverpassLayer(area, layerId, fetcher);
+  if (fetcher !== fetch || signal) return requestOverpassLayer(area, layerId, fetcher, signal);
   const key = cacheKey(area, layerId);
   const cached = cache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
   if (cached) cache.delete(key);
   const active = inFlight.get(key);
   if (active) return active;
-  const request = requestOverpassLayer(area, layerId, fetcher)
+  const request = requestOverpassLayer(area, layerId, fetcher, signal)
     .then((value) => {
       storeCachedResult(key, value);
       return value;
