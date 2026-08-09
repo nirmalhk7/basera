@@ -32,6 +32,7 @@ export function LayerCatalog({
   selectedLayerIds,
   loadingLayerIds,
   coverageByLayer,
+  catalogByLayer,
   onToggle
 }: LayerCatalogProps) {
   const layers: readonly LayerDefinition[] = RESEARCH_LAYERS;
@@ -51,7 +52,9 @@ export function LayerCatalog({
             const selected = selectedLayerIds.includes(layer.id);
             const loading = loadingLayerIds.includes(layer.id);
             const coverage = coverageByLayer[layer.id];
-            const liveCapable = layer.supportedModes.includes(mode);
+            const catalog = catalogByLayer[layer.id];
+            const availability = coverage?.level ?? catalog?.availability;
+            const liveCapable = catalog ? catalog.availability !== 'unavailable' : layer.supportedModes.includes(mode);
             return (
               <li key={layer.id} className="rounded-lg border border-white/10 bg-white/[0.025] p-3">
                 <label className={`flex items-start gap-3 ${disabled ? 'cursor-not-allowed opacity-55' : 'cursor-pointer'}`}>
@@ -67,12 +70,12 @@ export function LayerCatalog({
                     <span className="mt-1 block text-xs leading-5 text-slate-400">{layer.description}</span>
                     <span className="mt-2 flex flex-wrap items-center gap-1.5">
                       <span className={`text-[10px] font-semibold tracking-wide uppercase ${liveCapable ? 'text-emerald-300/80' : 'text-slate-500'}`}>
-                        {liveCapable ? 'Source adapter configured' : 'Source availability must be verified'}
+                        {availability ?? (liveCapable ? 'partial' : 'unavailable')}
                       </span>
                       {loading ? <span className="rounded border border-cyan-300/30 bg-cyan-300/10 px-1.5 py-0.5 text-[10px] font-bold text-cyan-100 uppercase">Loading</span> : null}
-                      {coverage ? <span title={coverage.message} className={`rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase ${coverageTone(coverage.level)}`}>{coverage.level}</span> : null}
+                      {availability ? <span title={coverage?.message ?? catalog?.limitation} className={`rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase ${coverageTone(availability)}`}>{availability}</span> : null}
                     </span>
-                    {coverage?.message ? <span className="mt-1 block text-xs text-slate-400">{coverage.message}</span> : null}
+                    {coverage?.message || catalog?.limitation ? <span className="mt-1 block text-xs text-slate-400">{coverage?.message ?? catalog?.limitation}</span> : null}
                   </span>
                 </label>
               </li>
