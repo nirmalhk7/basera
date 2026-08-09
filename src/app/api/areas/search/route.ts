@@ -1,25 +1,48 @@
 import { NextRequest, NextResponse } from "next/server";
-import { searchNominatimAreas } from "@/server/connectors/nominatim";
+import { parseSearchIntent } from "@/server/boundaries";
+import { createNominatimBoundaryProvider } from "@/server/connectors/nominatim";
 
-const MIN_QUERY_LENGTH = 2;
-const MAX_QUERY_LENGTH = 160;
 const CACHE_HEADERS = { "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600" };
 
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
-  const query = new URL(request.url).searchParams.get("q")?.trim() ?? "";
-  if (query.length < MIN_QUERY_LENGTH || query.length > MAX_QUERY_LENGTH) {
+  const params = new URL(request.url).searchParams;
+  const intent = parseSearchIntent(params.get("q"), params.get("kind"));
+  if (!intent.valid) {
     return NextResponse.json(
-      { error: `q must contain ${MIN_QUERY_LENGTH} to ${MAX_QUERY_LENGTH} characters.` },
+      { error: intent.error, code: intent.code },
       { status: 400, headers: CACHE_HEADERS },
     );
   }
 
+  const provider = createNominatimBoundaryProvider();
+  const supported = provider.metadata.supportedSearchKinds.includes(intent.kind);
+  const providerSupport = [{ providerId: provider.metadata.id, supported }];
+  if (!supported) {
+    return NextResponse.json({
+      error: `No configured boundary provider supports ${intent.kind} searches.`,
+      code: "unsupported_search_kind",
+      kind: intent.kind,
+      providerSupport,
+    }, { status: 422, headers: CACHE_HEADERS });
+  }
+
   try {
-    const result = await searchNominatimAreas(query);
+    const results = await provider.search(intent);
     return NextResponse.json(
-      { results: result.areas, source: result.source, partial: false },
+      {
+        intent: { query: intent.query, kind: intent.kind },
+        providerSupport,
+        providers: [provider.metadata],
+        results,
+        source: {
+          name: "OpenStreetMap Nominatim",
+          url: "https://nominatim.openstreetmap.org/",
+          attribution: "Search data © OpenStreetMap contributors, via Nominatim",
+        },
+        partial: false,
+      },
       { headers: CACHE_HEADERS },
     );
   } catch (error) {
@@ -32,6 +55,9 @@ export async function GET(request: NextRequest) {
           url: "https://nominatim.openstreetmap.org/",
           attribution: "Search data © OpenStreetMap contributors, via Nominatim",
         },
+        intent: { query: intent.query, kind: intent.kind },
+        providerSupport,
+        providers: [provider.metadata],
         partial: true,
         error: "The live area search service did not return a response. No fallback results were generated.",
       },
