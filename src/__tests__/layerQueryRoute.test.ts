@@ -218,13 +218,19 @@ describe("POST /api/layers/query", () => {
     expect(global.fetch).toHaveBeenCalledOnce();
   });
 
-  it("uses weak coverage when a successful live query returns no proven features", async () => {
+  it("distinguishes a successful empty result from unavailable or failed coverage", async () => {
     resolveNominatimArea.mockResolvedValue(area);
     global.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ elements: [] }), { status: 200 })) as typeof fetch;
 
     const response = await POST(request({ areaId: area.id, mode: "current", layerIds: ["roads"] }));
     const body = await response.json();
 
-    expect(body.layers[0]).toMatchObject({ features: [], coverage: { level: "weak" } });
+    expect(body.layers[0]).toMatchObject({
+      features: [],
+      coverage: {
+        level: "partial",
+        message: expect.stringContaining("found nothing"),
+      },
+    });
   });
 });

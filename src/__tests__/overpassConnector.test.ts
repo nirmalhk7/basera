@@ -117,7 +117,7 @@ describe("Overpass connector", () => {
     });
   });
 
-  it("drops a way that crosses a selected-area hole even when its endpoints are inside", async () => {
+  it("retains a way that crosses a selected-area hole with an intersects label", async () => {
     const areaWithHole: AreaSelection = {
       ...area,
       geometry: {
@@ -138,7 +138,24 @@ describe("Overpass connector", () => {
 
     const result = await queryOverpassLayer(areaWithHole, "roads");
 
-    expect(result.features).toEqual([]);
+    expect(result.features).toHaveLength(1);
+    expect(result.features[0].containment).toBe("intersects");
+  });
+
+  it("marks an exact configured output cap as truncated", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      elements: Array.from({ length: 1_000 }, (_, index) => ({
+        type: "node",
+        id: index + 1,
+        lat: 28.5,
+        lon: 77.5,
+        tags: { highway: "residential" },
+      })),
+    }), { status: 200 }));
+
+    const result = await queryOverpassLayer(area, "roads", fetchMock as typeof fetch);
+
+    expect(result.truncated).toBe(true);
   });
 
   it("limits distinct live layer requests to two concurrent transports", async () => {
