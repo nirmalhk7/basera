@@ -2,6 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
+type Coordinate = [number, number];
+type JurisdictionGeometry =
+  | { type: 'Polygon'; coordinates: Coordinate[][] }
+  | { type: 'MultiPolygon'; coordinates: Coordinate[][][] }
+  | { type: 'Point'; coordinates: Coordinate };
+type JurisdictionFeature = {
+  geometry: JurisdictionGeometry | null;
+  properties: Record<string, string | undefined>;
+};
+type JurisdictionFeatureCollection = { features: JurisdictionFeature[] };
+
 // Point-in-polygon ray-casting algorithm
 function isPointInPolygon(point: [number, number], vs: [number, number][]): boolean {
   const x = point[0], y = point[1];
@@ -32,14 +43,14 @@ function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): 
 }
 
 // Cache GeoJSON data in memory to make subsequent requests ultra-fast (sub-millisecond)
-let cachedGeoJson: any = null;
+let cachedGeoJson: JurisdictionFeatureCollection | null = null;
 
-function loadGeoJson() {
+function loadGeoJson(): JurisdictionFeatureCollection | null {
   if (cachedGeoJson) return cachedGeoJson;
   const filePath = path.join(process.cwd(), 'data', 'india_town_planner_jurisdictions.geojson');
   if (fs.existsSync(filePath)) {
     const raw = fs.readFileSync(filePath, 'utf8');
-    cachedGeoJson = JSON.parse(raw);
+    cachedGeoJson = JSON.parse(raw) as JurisdictionFeatureCollection;
     return cachedGeoJson;
   }
   return null;
@@ -193,7 +204,7 @@ export async function GET(req: NextRequest) {
   }
 
   const point: [number, number] = [lng, lat]; // GeoJSON uses [longitude, latitude]
-  let bestMatch: any = null;
+  let bestMatch: JurisdictionFeature | null = null;
   let minDistance = Infinity;
 
   for (const feature of geojson.features) {
