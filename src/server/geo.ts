@@ -1,4 +1,4 @@
-import type { AreaGeometry, BoundingBox, GeoPosition } from "@/types/research";
+import type { AreaGeometry, BoundingBox, GeoPosition, ResearchGeometry } from "@/types/research";
 import {
   getAreaGeometryBounds,
   isPointStrictlyInsideAreaGeometry,
@@ -67,6 +67,102 @@ function segmentsIntersect(firstStart: Position, firstEnd: Position, secondStart
   if (Math.abs(third) <= epsilon && onSegment(firstStart, secondStart, secondEnd)) return true;
   if (Math.abs(fourth) <= epsilon && onSegment(firstEnd, secondStart, secondEnd)) return true;
   return (first > 0) !== (second > 0) && (third > 0) !== (fourth > 0);
+}
+
+function pointOnAreaBoundary(point: Position, geometry: AreaGeometry): boolean {
+  const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+  return polygons.some((rings) => rings.some((ring) => {
+    for (let index = 1; index < ring.length; index += 1) {
+      if (onSegment(point, ring[index - 1], ring[index])) return true;
+    }
+    return false;
+  }));
+}
+
+function areaBoundarySegments(geometry: AreaGeometry): Array<[Position, Position]> {
+  const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+  return polygons.flatMap((rings) => rings.flatMap((ring) => {
+    const segments: Array<[Position, Position]> = [];
+    for (let index = 1; index < ring.length; index += 1) {
+      segments.push([ring[index - 1], ring[index]]);
+    }
+    return segments;
+  }));
+}
+
+function containmentForPositions(
+  positions: readonly Position[],
+  geometry: AreaGeometry,
+  isClosed: boolean,
+): "inside" | "intersects" | "outside" {
+  const boundarySegments = areaBoundarySegments(geometry);
+  const strictInside = positions.every((position) => isPointStrictlyInsideAreaGeometry(position, geometry));
+  if (strictInside) {
+    const segments = isClosed ? positions.map((position, index) => [
+      position,
+      positions[(index + 1) % positions.length],
+    ] as [Position, Position]) : positions.slice(1).map((position, index) => [
+      positions[index],
+      position,
+    ] as [Position, Position]);
+    if (segments.some(([start, end]) =>
+      boundarySegments.some(([boundaryStart, boundaryEnd]) =>
+        segmentsIntersect(start, end, boundaryStart, boundaryEnd)))) {
+      return "intersects";
+    }
+    return "inside";
+  }
+
+  const hasInteriorPosition = positions.some((position) =>
+    isPointStrictlyInsideAreaGeometry(position, geometry));
+  const hasBoundaryContact = positions.some((position) => pointOnAreaBoundary(position, geometry));
+  const segments = isClosed ? positions.map((position, index) => [
+    position,
+    positions[(index + 1) % positions.length],
+  ] as [Position, Position]) : positions.slice(1).map((position, index) => [
+    positions[index],
+    position,
+  ] as [Position, Position]);
+  const crossesBoundary = segments.some(([start, end]) =>
+    boundarySegments.some(([boundaryStart, boundaryEnd]) =>
+      segmentsIntersect(start, end, boundaryStart, boundaryEnd)));
+  return hasInteriorPosition || hasBoundaryContact || crossesBoundary ? "intersects" : "outside";
+}
+
+function areaHasPositionInsideFeature(featureGeometry: AreaGeometry, areaGeometry: AreaGeometry): boolean {
+  const areaPolygons = areaGeometry.type === "Polygon" ? [areaGeometry.coordinates] : areaGeometry.coordinates;
+  return areaPolygons.some((rings) => rings[0].some((position) =>
+    isPointStrictlyInsideAreaGeometry(position, featureGeometry)));
+}
+
+export function classifyGeometryContainment(
+  geometry: ResearchGeometry,
+  areaGeometry: AreaGeometry,
+): "inside" | "intersects" | "outside" {
+  if (geometry.type === "Point") {
+    if (isPointStrictlyInsideAreaGeometry(geometry.coordinates, areaGeometry)) return "inside";
+    return pointOnAreaBoundary(geometry.coordinates, areaGeometry) ? "intersects" : "outside";
+  }
+  if (geometry.type === "LineString") {
+    return containmentForPositions(geometry.coordinates, areaGeometry, false);
+  }
+  if (geometry.type === "MultiLineString") {
+    const results = geometry.coordinates.map((line) => containmentForPositions(line, areaGeometry, false));
+    return results.includes("intersects") ? "intersects" : results.includes("inside") ? "inside" : "outside";
+  }
+  if (geometry.type === "Polygon") {
+    const containment = containmentForPositions(geometry.coordinates[0], areaGeometry, true);
+    return containment === "outside" && areaHasPositionInsideFeature(geometry, areaGeometry)
+      ? "intersects"
+      : containment;
+  }
+  const results = geometry.coordinates.map((polygon) => {
+    const containment = containmentForPositions(polygon[0], areaGeometry, true);
+    return containment === "outside" && areaHasPositionInsideFeature({ type: "Polygon", coordinates: polygon }, areaGeometry)
+      ? "intersects"
+      : containment;
+  });
+  return results.includes("intersects") ? "intersects" : results.includes("inside") ? "inside" : "outside";
 }
 
 function segmentIsStrictlyInsidePolygon(start: Position, end: Position, rings: readonly (readonly Position[])[]): boolean {
