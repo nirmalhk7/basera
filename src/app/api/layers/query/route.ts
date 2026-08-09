@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { getResearchLayer } from "@/config/researchLayers";
+import { resolveAreaReference } from "@/server/connectors/areaReferences";
 import { bboxMatchesGeometry, INDIA_BBOX, isAreaGeometry } from "@/server/geo";
-import { resolveNominatimArea } from "@/server/connectors/nominatim";
-import { isLiveQueryBboxSafe, isSupportedLayerId, queryOverpassLayer } from "@/server/connectors/overpass";
-import type { AreaSelection, LayerCoverage, LayerId, LayerQueryRequest, LayerQueryResponse, LayerResult, ResearchMode, SourceReference } from "@/types/research";
+import { isLiveQueryBboxSafe } from "@/server/connectors/overpass";
+import { orchestrateLayerQueries } from "@/server/connectors/registry";
+import type { AreaSelection, LayerId, LayerQueryRequest, LayerQueryResponse, SourceReference } from "@/types/research";
 
 const MAX_BODY_BYTES = 8_192;
 const MAX_LAYERS = 17;
-const AREA_ID_PATTERN = /^osm:(?:relation|way)\/[1-9]\d*$/;
+const AREA_ID_PATTERN = /^(?:osm:(?:relation|way)\/[1-9]\d*|user:boundary\/[0-9a-f-]{36})$/;
 const CACHE_HEADERS = { "Cache-Control": "public, max-age=30, s-maxage=120, stale-while-revalidate=300" };
 
 const LAYER_IDS: readonly LayerId[] = [
@@ -86,44 +86,6 @@ function isLayerQueryRequest(value: unknown): value is LayerQueryRequest {
     value.layerIds.every(isLayerId);
 }
 
-function sourceReferences(layerId: LayerId): SourceReference[] {
-  const layer = getResearchLayer(layerId);
-  return (layer?.sourceRequirements ?? [])
-    .flatMap((source) => source.url ? [{ name: source.name, url: source.url }] : []);
-}
-
-function unavailableCoverage(layerId: LayerId, mode: ResearchMode): LayerCoverage {
-  return {
-    layerId,
-    level: "unavailable",
-    message: `No live ${mode} source adapter is configured for this layer; no features were generated.`,
-    sourcesChecked: sourceReferences(layerId),
-    sourcesSucceeded: [],
-  };
-}
-
-function failedCoverage(layerId: LayerId, reason: unknown): LayerCoverage {
-  const detail = reason instanceof Error ? reason.message : "Unknown upstream failure";
-  return {
-    layerId,
-    level: "failed",
-    message: `OpenStreetMap query failed: ${detail}. No fallback features were generated.`,
-    sourcesChecked: sourceReferences(layerId),
-    sourcesSucceeded: [],
-  };
-}
-
-function completedCoverage(layerId: LayerId, featureCount: number, osmBaseTimestamp?: string): LayerCoverage {
-  const timestamp = osmBaseTimestamp ? ` OSM base timestamp: ${osmBaseTimestamp}.` : "";
-  return {
-    layerId,
-    level: featureCount === 0 ? "weak" : "partial",
-    message: `Live OpenStreetMap query completed with ${featureCount} feature${featureCount === 1 ? "" : "s"}. Results are capped and only geometry proven strictly inside the selected area is returned.${timestamp}`,
-    sourcesChecked: [{ name: "OpenStreetMap", url: "https://www.openstreetmap.org/" }],
-    sourcesSucceeded: [{ name: "OpenStreetMap", url: "https://www.openstreetmap.org/" }],
-  };
-}
-
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
@@ -153,7 +115,7 @@ export async function POST(request: Request) {
 
   let area: AreaSelection | null;
   try {
-    area = await resolveNominatimArea(payload.areaId);
+    area = await resolveAreaReference(payload.areaId);
   } catch {
     return NextResponse.json({ error: "Area resolution failed. No fallback area was used." }, { status: 502, headers: CACHE_HEADERS });
   }
@@ -170,43 +132,14 @@ export async function POST(request: Request) {
   }
 
   const uniqueLayerIds = [...new Set(payload.layerIds)];
-  const resultByLayer = new Map<LayerId, LayerResult>();
-  const supportedCurrentLayerIds = payload.mode === "current" ? uniqueLayerIds.filter(isSupportedLayerId) : [];
-  const pending = supportedCurrentLayerIds
-    .map(async (layerId) => ({ layerId, result: await queryOverpassLayer(area, layerId) }));
-  const settled = await Promise.allSettled(pending);
-
-  for (const layerId of uniqueLayerIds) {
-    if (payload.mode !== "current" || !isSupportedLayerId(layerId)) {
-      resultByLayer.set(layerId, { layerId, features: [], coverage: unavailableCoverage(layerId, payload.mode) });
-    }
-  }
-  for (const [index, settledResult] of settled.entries()) {
-    const layerId = supportedCurrentLayerIds[index];
-    if (settledResult.status === "fulfilled") {
-      const { result } = settledResult.value;
-      resultByLayer.set(layerId, {
-        layerId,
-        features: result.features,
-        coverage: completedCoverage(layerId, result.features.length, result.osmBaseTimestamp),
-      });
-    } else {
-      resultByLayer.set(layerId, {
-        layerId,
-        features: [],
-        coverage: failedCoverage(layerId, settledResult.reason),
-      });
-    }
-  }
+  const orchestration = await orchestrateLayerQueries(area, payload.mode, uniqueLayerIds, request.signal);
 
   const response: LayerQueryResponse = {
     area,
     mode: payload.mode,
-    layers: uniqueLayerIds.map((layerId) => resultByLayer.get(layerId) ?? {
-      layerId,
-      features: [],
-      coverage: failedCoverage(layerId, "Layer result was not produced"),
-    }),
+    layers: orchestration.layers.map(({ layerId, result }) => ({ layerId, features: result.features, coverage: result.coverage })),
+    nonSpatialEvidence: orchestration.layers.flatMap(({ result }) => result.nonSpatialEvidence),
+    providerOutcomes: orchestration.providerOutcomes,
     generatedAt: new Date().toISOString(),
   };
   return NextResponse.json(response, { headers: CACHE_HEADERS });

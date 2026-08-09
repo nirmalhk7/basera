@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
 
     const data = await res.json();
     return NextResponse.json(data);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('API Route fetch error:', error);
     return NextResponse.json({ error: 'Failed to fetch from Nominatim' }, { status: 500 });
   }
