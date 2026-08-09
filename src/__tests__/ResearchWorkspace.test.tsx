@@ -57,7 +57,7 @@ function errorResponse(error: unknown): Response {
 function layerResponse(
   layerId: 'healthcare' | 'flood',
   features: readonly ResearchFeature[],
-  level: 'strong' | 'unavailable',
+  level: 'available' | 'unavailable',
   responseArea: AreaSelection = area
 ): LayerQueryResponse {
   return {
@@ -71,9 +71,14 @@ function layerResponse(
         level,
         message: level === 'unavailable' ? 'No live future source adapter is configured for this layer; no features were generated.' : 'Live OpenStreetMap query completed with one feature.',
         sourcesChecked: [],
-        sourcesSucceeded: level === 'strong' ? [{ name: 'OpenStreetMap', url: 'https://www.openstreetmap.org/' }] : []
+        sourcesSucceeded: level === 'available' ? [{ name: 'OpenStreetMap', url: 'https://www.openstreetmap.org/' }] : [],
+        truncated: false,
+        generatedAt: '2026-07-26T12:00:00.000Z',
+        retryable: false,
       }
     }],
+    nonSpatialEvidence: [],
+    providerOutcomes: [],
     generatedAt: '2026-07-26T12:00:00.000Z'
   };
 }
@@ -104,7 +109,8 @@ describe('ResearchWorkspace orchestration', () => {
           attribution: 'Search data © OpenStreetMap contributors, via Nominatim'
         }
       }))
-      .mockResolvedValueOnce(jsonResponse(layerResponse('healthcare', [feature], 'strong')));
+      .mockResolvedValueOnce(jsonResponse({ area, mode: 'current', layers: [] }))
+      .mockResolvedValueOnce(jsonResponse(layerResponse('healthcare', [feature], 'available')));
     render(<ResearchWorkspace />);
 
     expect(fetchMock).not.toHaveBeenCalled();
@@ -118,16 +124,15 @@ describe('ResearchWorkspace orchestration', () => {
       .toHaveAttribute('href', 'https://nominatim.openstreetmap.org/');
 
     fireEvent.click(screen.getByRole('button', { name: /Pune, Maharashtra, India/ }));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: 'Confirm area' }));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(screen.getByText('Boundary confirmed')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Confirm area' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('checkbox', { name: /Healthcare/i }));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(fetchMock.mock.calls[1][0]).toBe('/api/layers/query');
-    const request = JSON.parse(fetchMock.mock.calls[1][1].body);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(fetchMock.mock.calls[2][0]).toBe('/api/layers/query');
+    const request = JSON.parse(fetchMock.mock.calls[2][1].body);
     expect(request).toEqual({ areaId: area.id, mode: 'current', layerIds: ['healthcare'] });
     expect(request).not.toHaveProperty('area');
     expect(request).not.toHaveProperty('geometry');
@@ -142,6 +147,8 @@ describe('ResearchWorkspace orchestration', () => {
   it('shows future unavailability only when the API reports it', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ results: [area] }))
+      .mockResolvedValueOnce(jsonResponse({ area, mode: 'current', layers: [] }))
+      .mockResolvedValueOnce(jsonResponse({ area, mode: 'future', layers: [] }))
       .mockResolvedValueOnce(jsonResponse(layerResponse('flood', [], 'unavailable')));
     render(<ResearchWorkspace />);
 
@@ -149,14 +156,15 @@ describe('ResearchWorkspace orchestration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'future' }));
     fireEvent.click(screen.getByRole('checkbox', { name: /Flood risk/i }));
     await screen.findByText(/No live future source adapter is configured/i);
-    expect(screen.getByText('unavailable')).toBeInTheDocument();
+    expect(screen.getAllByText('unavailable').length).toBeGreaterThan(0);
   });
 
   it('shows a layer API error returned by the server and clears it after a successful retry', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ results: [area] }))
+      .mockResolvedValueOnce(jsonResponse({ area, mode: 'current', layers: [] }))
       .mockResolvedValueOnce(errorResponse('This layer is not available for the selected area.'))
-      .mockResolvedValueOnce(jsonResponse(layerResponse('healthcare', [feature], 'strong')));
+      .mockResolvedValueOnce(jsonResponse(layerResponse('healthcare', [feature], 'available')));
     render(<ResearchWorkspace />);
 
     await searchAndConfirm();
@@ -174,6 +182,7 @@ describe('ResearchWorkspace orchestration', () => {
   it('clears a layer error when the last selected layer is removed', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ results: [area] }))
+      .mockResolvedValueOnce(jsonResponse({ area, mode: 'current', layers: [] }))
       .mockResolvedValueOnce(errorResponse('This layer is not available for the selected area.'));
     render(<ResearchWorkspace />);
 
@@ -195,7 +204,8 @@ describe('ResearchWorkspace orchestration', () => {
     };
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ results: [area] }))
-      .mockResolvedValueOnce(jsonResponse(layerResponse('healthcare', [feature], 'strong', authoritativeArea)));
+      .mockResolvedValueOnce(jsonResponse({ area, mode: 'current', layers: [] }))
+      .mockResolvedValueOnce(jsonResponse(layerResponse('healthcare', [feature], 'available', authoritativeArea)));
     render(<ResearchWorkspace />);
 
     await searchAndConfirm();
@@ -204,8 +214,8 @@ describe('ResearchWorkspace orchestration', () => {
 
     await waitFor(() => {
       expect(screen.getByLabelText('Mapped boundary')).toHaveTextContent(`${authoritativeArea.id}: ${authoritativeArea.bbox.join(',')}`);
-      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
     });
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ areaId: area.id, mode: 'current', layerIds: ['healthcare'] });
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ areaId: area.id, mode: 'current', layerIds: ['healthcare'] });
   });
 });
