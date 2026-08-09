@@ -1,6 +1,15 @@
-import type { AreaGeometry, BoundingBox, GeoPosition, LinearRing, PolygonGeometry } from '@/types/research';
+import type {
+  AreaGeometry,
+  BoundingBox,
+  GeoPosition,
+  LinearRing,
+  PolygonGeometry,
+} from '@/types/research';
 
 const MINIMUM_RING_POSITIONS = 4;
+const INDIA_BOUNDS: BoundingBox = [68.1, 6, 97.5, 37.1];
+const MAX_EDITABLE_VERTICES = 5_000;
+const MAX_EDITABLE_BBOX_SPAN = 5;
 
 function coordinatesMatch(first: GeoPosition, second: GeoPosition): boolean {
   return first[0] === second[0] && first[1] === second[1];
@@ -30,6 +39,50 @@ function ringHasArea(ring: LinearRing): boolean {
   return twiceArea !== 0;
 }
 
+function orientation(start: GeoPosition, end: GeoPosition, point: GeoPosition): number {
+  return (end[0] - start[0]) * (point[1] - start[1]) -
+    (end[1] - start[1]) * (point[0] - start[0]);
+}
+
+function onSegment(point: GeoPosition, start: GeoPosition, end: GeoPosition): boolean {
+  const epsilon = 1e-10;
+  return Math.abs(orientation(start, end, point)) <= epsilon &&
+    point[0] >= Math.min(start[0], end[0]) - epsilon &&
+    point[0] <= Math.max(start[0], end[0]) + epsilon &&
+    point[1] >= Math.min(start[1], end[1]) - epsilon &&
+    point[1] <= Math.max(start[1], end[1]) + epsilon;
+}
+
+function segmentsIntersect(
+  firstStart: GeoPosition,
+  firstEnd: GeoPosition,
+  secondStart: GeoPosition,
+  secondEnd: GeoPosition,
+): boolean {
+  const first = orientation(firstStart, firstEnd, secondStart);
+  const second = orientation(firstStart, firstEnd, secondEnd);
+  const third = orientation(secondStart, secondEnd, firstStart);
+  const fourth = orientation(secondStart, secondEnd, firstEnd);
+
+  if (onSegment(secondStart, firstStart, firstEnd) ||
+      onSegment(secondEnd, firstStart, firstEnd) ||
+      onSegment(firstStart, secondStart, secondEnd) ||
+      onSegment(firstEnd, secondStart, secondEnd)) {
+    return true;
+  }
+  return (first > 0) !== (second > 0) && (third > 0) !== (fourth > 0);
+}
+
+function ringHasSelfIntersection(ring: LinearRing): boolean {
+  for (let first = 0; first < ring.length - 1; first += 1) {
+    for (let second = first + 1; second < ring.length - 1; second += 1) {
+      if (second === first + 1 || (first === 0 && second === ring.length - 2)) continue;
+      if (segmentsIntersect(ring[first], ring[first + 1], ring[second], ring[second + 1])) return true;
+    }
+  }
+  return false;
+}
+
 export function isValidLinearRing(ring: LinearRing): boolean {
   if (ring.length < MINIMUM_RING_POSITIONS) {
     return false;
@@ -38,7 +91,9 @@ export function isValidLinearRing(ring: LinearRing): boolean {
   const first = ring[0];
   const last = ring[ring.length - 1];
 
-  return ring.every(isFinitePosition) && coordinatesMatch(first, last) && ringHasArea(ring);
+  return ring.every(isFinitePosition) &&
+    coordinatesMatch(first, last) &&
+    ringHasArea(ring);
 }
 
 function isValidPolygon(polygon: PolygonGeometry): boolean {
@@ -78,6 +133,49 @@ export function getAreaGeometryBounds(geometry: AreaGeometry): BoundingBox | nul
   }
 
   return [minimumLongitude, minimumLatitude, maximumLongitude, maximumLatitude];
+}
+
+function vertexCount(geometry: AreaGeometry): number {
+  const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+  return polygons.reduce((total, polygon) =>
+    total + polygon.reduce((polygonTotal, ring) => polygonTotal + ring.length, 0), 0);
+}
+
+export type EditableGeometryValidation =
+  | { readonly valid: true; readonly bbox: BoundingBox; readonly vertexCount: number }
+  | { readonly valid: false; readonly reason: 'invalid-geometry' | 'self-intersection' | 'outside-india' | 'too-many-vertices' | 'too-large' };
+
+export function validateEditableAreaGeometry(value: unknown): EditableGeometryValidation {
+  if (!value || typeof value !== 'object' || !isValidAreaGeometry(value as AreaGeometry)) {
+    const candidate = value as { type?: unknown; coordinates?: unknown } | null;
+    if (candidate?.type === 'Polygon' && Array.isArray(candidate.coordinates) &&
+        candidate.coordinates.some((ring) => Array.isArray(ring) && ringHasSelfIntersection(ring as LinearRing))) {
+      return { valid: false, reason: 'self-intersection' };
+    }
+    return { valid: false, reason: 'invalid-geometry' };
+  }
+
+  const geometry = value as AreaGeometry;
+  const bbox = getAreaGeometryBounds(geometry);
+  if (!bbox) return { valid: false, reason: 'invalid-geometry' };
+  const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+  if (polygons.some((polygon) => polygon.some((ring) => ringHasSelfIntersection(ring)))) {
+    return { valid: false, reason: 'self-intersection' };
+  }
+  const count = vertexCount(geometry);
+  if (count > MAX_EDITABLE_VERTICES) return { valid: false, reason: 'too-many-vertices' };
+  if (
+    bbox[0] < INDIA_BOUNDS[0] ||
+    bbox[1] < INDIA_BOUNDS[1] ||
+    bbox[2] > INDIA_BOUNDS[2] ||
+    bbox[3] > INDIA_BOUNDS[3]
+  ) {
+    return { valid: false, reason: 'outside-india' };
+  }
+  if (bbox[2] - bbox[0] > MAX_EDITABLE_BBOX_SPAN || bbox[3] - bbox[1] > MAX_EDITABLE_BBOX_SPAN) {
+    return { valid: false, reason: 'too-large' };
+  }
+  return { valid: true, bbox, vertexCount: count };
 }
 
 function isPointOnSegment(point: GeoPosition, start: GeoPosition, end: GeoPosition): boolean {
