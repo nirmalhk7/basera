@@ -2,9 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   calculateHaversineDistanceKm,
   detectCityAtCoordinates,
-  isCoordinateWithinIndiaBounds,
-  INDIA_BOUNDS_COORDS,
-  CITY_ZOOM_THRESHOLD
+  isCoordinateWithinIndiaBounds
 } from '../utils/geospatialDetector';
 
 describe('Geospatial Detector Utility', () => {

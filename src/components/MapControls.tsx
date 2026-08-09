@@ -7,8 +7,7 @@ import {
   Search,
   Layers,
   ChevronRight,
-  Loader2,
-  Sparkles
+  Loader2
 } from 'lucide-react';
 
 interface MapControlsProps {

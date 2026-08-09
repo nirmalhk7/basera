@@ -1,8 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GET } from '../app/api/jurisdiction/route';
 import { NextRequest } from 'next/server';
 import fs from 'fs';
-import path from 'path';
 
 // Mock fs module
 vi.mock('fs', () => ({
