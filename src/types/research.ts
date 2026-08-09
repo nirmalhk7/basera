@@ -47,7 +47,18 @@ export type BoundingBox = readonly [
 
 export type ResearchMode = 'current' | 'future';
 
-export type CoverageLevel = 'strong' | 'partial' | 'weak' | 'unavailable' | 'failed';
+export type CoverageLevel = 'available' | 'partial' | 'unavailable' | 'failed';
+
+export type BoundarySourceType = 'official' | 'community' | 'user';
+
+export type BoundaryConfidence = 'high' | 'medium' | 'low';
+
+export interface BoundaryProvenance {
+  readonly sourceType: BoundarySourceType;
+  readonly confidence: BoundaryConfidence;
+  readonly editable: boolean;
+  readonly authority?: string;
+}
 
 export type LayerId =
   | 'transport'
@@ -106,6 +117,7 @@ export interface AreaSelection {
   readonly state?: string;
   readonly district?: string;
   readonly source: SourceReference;
+  readonly boundary?: BoundaryProvenance;
   readonly geometry: AreaGeometry;
   readonly bbox: BoundingBox;
 }
@@ -146,6 +158,7 @@ export interface ResearchFeature {
   /** Selected, source-provided OSM tags. Values are displayed as text, never executed. */
   readonly attributes?: readonly ResearchAttribute[];
   readonly source: SourceEvidence;
+  readonly containment?: 'inside' | 'intersects';
   readonly confidence: {
     readonly evidence: 'high' | 'medium' | 'low';
     readonly geography: 'exact' | 'approximate' | 'area-wide';
@@ -158,12 +171,56 @@ export interface LayerCoverage {
   readonly message: string;
   readonly sourcesChecked: readonly SourceReference[];
   readonly sourcesSucceeded: readonly SourceReference[];
+  readonly truncated: boolean;
+  readonly generatedAt: string;
+  readonly retryable: boolean;
 }
 
 export interface LayerResult {
   readonly layerId: LayerId;
   readonly features: readonly ResearchFeature[];
   readonly coverage: LayerCoverage;
+}
+
+export interface AreaCatalogEntry {
+  readonly layerId: LayerId;
+  readonly mode: ResearchMode;
+  readonly availability: CoverageLevel;
+  readonly providers: readonly SourceRequirement[];
+  readonly limitation?: string;
+  readonly checkedAt: string;
+  /** ISO 8601 duration since the provider support state was observed. */
+  readonly sourceAge?: string;
+  readonly sourceHealth: 'unknown' | 'healthy' | 'degraded' | 'rate_limited' | 'disabled';
+}
+
+export type ProviderOutcomeStatus = 'succeeded' | 'failed' | 'unavailable' | 'timed_out' | 'aborted' | 'rate_limited';
+
+export interface ProviderOutcome {
+  readonly providerId: string;
+  readonly provider: SourceReference;
+  readonly layerId: LayerId;
+  readonly status: ProviderOutcomeStatus;
+  readonly message: string;
+  readonly retryable: boolean;
+}
+
+export interface ResearchEvidence {
+  readonly id: string;
+  readonly title: string;
+  readonly claim: string;
+  readonly source: SourceEvidence;
+  readonly confidence: {
+    readonly geography: 'exact' | 'approximate' | 'area-wide';
+  };
+  readonly status?: FeatureStatus;
+  readonly excerpt?: string;
+}
+
+export interface ConnectorResult {
+  readonly features: readonly ResearchFeature[];
+  readonly coverage: LayerCoverage;
+  readonly nonSpatialEvidence: readonly ResearchEvidence[];
 }
 
 export interface LayerQueryRequest {
@@ -177,5 +234,7 @@ export interface LayerQueryResponse {
   readonly area: AreaSelection;
   readonly mode: ResearchMode;
   readonly layers: readonly LayerResult[];
+  readonly nonSpatialEvidence: readonly ResearchEvidence[];
+  readonly providerOutcomes: readonly ProviderOutcome[];
   readonly generatedAt: string;
 }
