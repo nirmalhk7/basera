@@ -43,10 +43,9 @@ describe('searchDynamicPlaces - Local Town Planner Search', () => {
       }
     ];
 
-    (fetch as any).mockResolvedValue({
-      ok: true,
-      json: async () => mockNominatimResponse
-    });
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify(mockNominatimResponse), { status: 200 })
+    );
 
     const results = await searchDynamicPlaces('Pune');
 

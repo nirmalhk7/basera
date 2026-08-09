@@ -57,8 +57,8 @@ describe('/api/jurisdiction Route Handler', () => {
   });
 
   it('should return matched jurisdiction properties for coordinates inside the polygon boundary', async () => {
-    (fs.existsSync as any).mockReturnValue(true);
-    (fs.readFileSync as any).mockReturnValue(JSON.stringify(dummyGeoJson));
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(dummyGeoJson));
 
     // Point [72.9, 19.0] is inside the Polygon [[72.8, 18.9], ..., [72.8, 18.9]]
     const req = new NextRequest('http://localhost/api/jurisdiction?lat=19.0&lng=72.9');
@@ -77,8 +77,8 @@ describe('/api/jurisdiction Route Handler', () => {
   });
 
   it('should match nearest Point jurisdiction if coordinate is within 15km and no polygon matches', async () => {
-    (fs.existsSync as any).mockReturnValue(true);
-    (fs.readFileSync as any).mockReturnValue(JSON.stringify(dummyGeoJson));
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(dummyGeoJson));
 
     // Coordinates [28.61, 77.21] are extremely close to the point [28.6, 77.2] (~1.5 km)
     const req = new NextRequest('http://localhost/api/jurisdiction?lat=28.61&lng=77.21');
@@ -91,8 +91,8 @@ describe('/api/jurisdiction Route Handler', () => {
   });
 
   it('should return found: false if coordinates are outside any polygon or point range', async () => {
-    (fs.existsSync as any).mockReturnValue(true);
-    (fs.readFileSync as any).mockReturnValue(JSON.stringify(dummyGeoJson));
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(dummyGeoJson));
 
     // [10.0, 70.0] is far away from both Pune and Delhi
     const req = new NextRequest('http://localhost/api/jurisdiction?lat=10.0&lng=70.0');
