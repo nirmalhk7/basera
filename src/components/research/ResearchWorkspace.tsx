@@ -4,7 +4,9 @@ import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   AreaSearchResult,
+  AreaCatalogEntry,
   AreaSelection,
+  GeoPosition,
   LayerCoverage,
   LayerId,
   LayerQueryRequest,
@@ -25,6 +27,11 @@ type ModeData<T> = Record<ResearchMode, T>;
 
 const initialFeatures: ModeData<readonly ResearchFeature[]> = { current: [], future: [] };
 const initialCoverage: ModeData<Record<string, LayerCoverageView>> = { current: {}, future: {} };
+const initialCatalog: ModeData<Record<string, AreaCatalogEntry>> = { current: {}, future: {} };
+type CachedLayerData = {
+  readonly features: readonly ResearchFeature[];
+  readonly coverage: Record<string, LayerCoverageView>;
+};
 
 interface AreaSearchResponse {
   readonly results: AreaSearchResult[];
@@ -99,15 +106,23 @@ export function ResearchWorkspace() {
   const [loadingLayerIds, setLoadingLayerIds] = useState<readonly LayerId[]>([]);
   const [featuresByMode, setFeaturesByMode] = useState<ModeData<readonly ResearchFeature[]>>(initialFeatures);
   const [coverageByMode, setCoverageByMode] = useState<ModeData<Record<string, LayerCoverageView>>>(initialCoverage);
+  const [catalogByMode, setCatalogByMode] = useState<ModeData<Record<string, AreaCatalogEntry>>>(initialCatalog);
   const [layerError, setLayerError] = useState<string | null>(null);
   const [selectedFeature, setSelectedFeature] = useState<ResearchFeature | null>(null);
+  const [isEditingBoundary, setIsEditingBoundary] = useState(false);
+  const [draftBoundary, setDraftBoundary] = useState<readonly GeoPosition[]>([]);
+  const [boundaryError, setBoundaryError] = useState<string | null>(null);
   const searchAbortRef = useRef<AbortController | null>(null);
   const layerAbortRef = useRef<AbortController | null>(null);
+  const catalogAbortRef = useRef<AbortController | null>(null);
+  const layerCacheRef = useRef(new Map<string, CachedLayerData>());
   const confirmedAreaId = confirmedArea?.id ?? null;
 
   useEffect(() => () => {
     searchAbortRef.current?.abort();
     layerAbortRef.current?.abort();
+    catalogAbortRef.current?.abort();
+    layerCacheRef.current.clear();
   }, []);
 
   const searchAreas = useCallback(async (query: string) => {
@@ -140,14 +155,104 @@ export function ResearchWorkspace() {
   const confirmArea = useCallback(() => {
     if (!pendingArea) return;
     layerAbortRef.current?.abort();
+    catalogAbortRef.current?.abort();
     setConfirmedArea(pendingArea);
     setPendingArea(null);
     setSelectedFeature(null);
     setFeaturesByMode(initialFeatures);
     setCoverageByMode(initialCoverage);
+    setCatalogByMode(initialCatalog);
+    layerCacheRef.current.clear();
     setLayerError(null);
     setLoadingLayerIds([]);
+    setBoundaryError(null);
+    setIsEditingBoundary(false);
+    setDraftBoundary([]);
   }, [pendingArea]);
+
+  const startBoundaryEdit = useCallback(() => {
+    if (!confirmedArea) return;
+    setDraftBoundary([]);
+    setBoundaryError(null);
+    setIsEditingBoundary(true);
+  }, [confirmedArea]);
+
+  const addBoundaryPoint = useCallback((point: GeoPosition) => {
+    setDraftBoundary((previous) => [...previous, point]);
+  }, []);
+
+  const cancelBoundaryEdit = useCallback(() => {
+    setDraftBoundary([]);
+    setBoundaryError(null);
+    setIsEditingBoundary(false);
+  }, []);
+
+  const finishBoundaryEdit = useCallback(async () => {
+    if (draftBoundary.length < 3) {
+      setBoundaryError('Add at least three boundary points before finishing.');
+      return;
+    }
+    const geometry = {
+      type: 'Polygon' as const,
+      coordinates: [[...draftBoundary, draftBoundary[0]]],
+    };
+    setBoundaryError(null);
+    try {
+      const response = await fetch('/api/areas/boundary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: confirmedArea?.displayName, geometry }),
+      });
+      const payload: unknown = await response.json().catch(() => null);
+      if (!response.ok || !payload || typeof payload !== 'object' || !('area' in payload)) {
+        throw new Error(payload && typeof payload === 'object' && typeof (payload as { error?: unknown }).error === 'string'
+          ? (payload as { error: string }).error
+          : 'Boundary could not be saved.');
+      }
+      const nextArea = (payload as { area: AreaSelection }).area;
+      layerAbortRef.current?.abort();
+      setConfirmedArea(nextArea);
+      setSelectedLayerIds({ current: [], future: [] });
+      setFeaturesByMode(initialFeatures);
+      setCoverageByMode(initialCoverage);
+      setCatalogByMode(initialCatalog);
+      layerCacheRef.current.clear();
+      setSelectedFeature(null);
+      setLoadingLayerIds([]);
+      setLayerError(null);
+      setDraftBoundary([]);
+      setIsEditingBoundary(false);
+    } catch (error) {
+      setBoundaryError(error instanceof Error ? error.message : 'Boundary could not be saved.');
+    }
+  }, [confirmedArea, draftBoundary]);
+
+  useEffect(() => {
+    if (!confirmedAreaId) {
+      catalogAbortRef.current?.abort();
+      return;
+    }
+    catalogAbortRef.current?.abort();
+    const controller = new AbortController();
+    catalogAbortRef.current = controller;
+    void (async () => {
+      try {
+        const response = await fetch(`/api/areas/catalog?areaId=${encodeURIComponent(confirmedAreaId)}&mode=${mode}`, { signal: controller.signal });
+        if (!response.ok) throw new Error('Area layer catalog is unavailable.');
+        const payload: unknown = await response.json();
+        if (!controller.signal.aborted && payload && typeof payload === 'object' && Array.isArray((payload as { layers?: unknown }).layers)) {
+          const layers = (payload as { layers: AreaCatalogEntry[] }).layers;
+          setCatalogByMode((previous) => ({
+            ...previous,
+            [mode]: Object.fromEntries(layers.map((entry) => [entry.layerId, entry])),
+          }));
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) setLayerError(error instanceof Error ? error.message : 'Area layer catalog is unavailable.');
+      }
+    })();
+    return () => controller.abort();
+  }, [confirmedAreaId, mode]);
 
   const toggleLayer = useCallback((layerId: LayerId) => {
     if (!confirmedArea) return;
@@ -173,6 +278,15 @@ export function ResearchWorkspace() {
     const controller = new AbortController();
     layerAbortRef.current = controller;
     const request: LayerQueryRequest = { areaId: confirmedAreaId, mode, layerIds };
+    const cacheKey = [confirmedAreaId, mode, [...layerIds].sort().join(','), 'catalog-v1'].join('|');
+    const cached = layerCacheRef.current.get(cacheKey);
+    if (cached) {
+      setFeaturesByMode((previous) => ({ ...previous, [mode]: cached.features }));
+      setCoverageByMode((previous) => ({ ...previous, [mode]: cached.coverage }));
+      setLayerError(null);
+      setLoadingLayerIds([]);
+      return () => controller.abort();
+    }
 
     void (async () => {
       setLayerError(null);
@@ -188,8 +302,11 @@ export function ResearchWorkspace() {
         if (controller.signal.aborted) return;
         setLayerError(null);
         setConfirmedArea((previous) => previous && hasSameBoundary(previous, payload.area) ? previous : payload.area);
-        setFeaturesByMode((previous) => ({ ...previous, [mode]: payload.layers.flatMap((layer) => layer.features) }));
-        setCoverageByMode((previous) => ({ ...previous, [mode]: coverageViews(payload.layers) }));
+        const features = payload.layers.flatMap((layer) => layer.features);
+        const coverage = coverageViews(payload.layers);
+        layerCacheRef.current.set(cacheKey, { features, coverage });
+        setFeaturesByMode((previous) => ({ ...previous, [mode]: features }));
+        setCoverageByMode((previous) => ({ ...previous, [mode]: coverage }));
       } catch (error) {
         if (!controller.signal.aborted) setLayerError(error instanceof Error ? error.message : 'Layer research request failed.');
       } finally {
@@ -216,18 +333,20 @@ export function ResearchWorkspace() {
 
       <div className="grid min-h-[calc(100vh-105px)] grid-cols-1 lg:h-[calc(100vh-105px)] lg:min-h-0 lg:grid-cols-[300px_minmax(0,1fr)_280px] xl:grid-cols-[340px_minmax(0,1fr)_300px]">
         <aside className="order-2 border-r border-white/10 bg-slate-900/35 lg:order-1 lg:max-h-[calc(100vh-105px)] lg:overflow-y-auto">
-          <AreaSearch results={searchResults} source={searchSource} isSearching={isSearching} error={searchError} selectedArea={pendingArea} confirmedArea={confirmedArea} hasSearched={hasSearched} onSearch={searchAreas} onSelect={setPendingArea} onConfirm={confirmArea} onCancel={() => setPendingArea(null)} />
+          <AreaSearch results={searchResults} source={searchSource} isSearching={isSearching} error={searchError} selectedArea={pendingArea} confirmedArea={confirmedArea} hasSearched={hasSearched} onSearch={searchAreas} onSelect={setPendingArea} onConfirm={confirmArea} onCancel={() => setPendingArea(null)} onEditBoundary={startBoundaryEdit} />
           <LayerCatalog
             mode={mode}
             disabled={!confirmedArea}
             selectedLayerIds={activeLayers}
             loadingLayerIds={loadingLayerIds}
             coverageByLayer={coverageByMode[mode]}
+            catalogByLayer={catalogByMode[mode]}
             onToggle={toggleLayer}
           />
+          {boundaryError ? <p role="alert" className="px-5 pb-3 text-sm text-rose-300">{boundaryError}</p> : null}
           {layerError ? <p role="alert" className="px-5 pb-5 text-sm text-rose-300">{layerError}</p> : null}
         </aside>
-        <div className="order-1 lg:order-2"><ResearchMap area={confirmedArea} features={featuresByMode[mode]} selectedFeatureId={selectedFeature?.id ?? null} onSelectFeature={setSelectedFeature} /></div>
+        <div className="order-1 lg:order-2"><ResearchMap area={confirmedArea} features={featuresByMode[mode]} selectedFeatureId={selectedFeature?.id ?? null} onSelectFeature={setSelectedFeature} isEditingBoundary={isEditingBoundary} draftBoundary={draftBoundary} onBoundaryPoint={addBoundaryPoint} onFinishBoundary={finishBoundaryEdit} onCancelBoundary={cancelBoundaryEdit} /></div>
         <div className="order-3"><EvidencePanel feature={selectedFeature} /></div>
       </div>
     </main>
