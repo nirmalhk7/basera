@@ -190,7 +190,7 @@ export default function IndiaTerrainMap() {
           if (map.hasLayer(boundaryGeoJsonLayerRef.current)) {
             map.removeLayer(boundaryGeoJsonLayerRef.current);
           }
-        } catch (e) {}
+        } catch {}
         boundaryGeoJsonLayerRef.current = null;
       }
       if (highlightBeaconRef.current) {
@@ -198,7 +198,7 @@ export default function IndiaTerrainMap() {
           if (map.hasLayer(highlightBeaconRef.current)) {
             map.removeLayer(highlightBeaconRef.current);
           }
-        } catch (e) {}
+        } catch {}
         highlightBeaconRef.current = null;
       }
     };
@@ -249,7 +249,7 @@ export default function IndiaTerrainMap() {
         if (boundaryGeoJsonLayerRef.current && map.hasLayer(boundaryGeoJsonLayerRef.current)) {
           map.removeLayer(boundaryGeoJsonLayerRef.current);
         }
-      } catch (e) {}
+      } catch {}
 
       const geoLayer = L.geoJSON(dynamicCityInfo.geoJsonBoundary, {
         style: {
@@ -279,7 +279,7 @@ export default function IndiaTerrainMap() {
             if (boundaryGeoJsonLayerRef.current && map.hasLayer(boundaryGeoJsonLayerRef.current)) {
               map.removeLayer(boundaryGeoJsonLayerRef.current);
             }
-          } catch (e) {}
+          } catch {}
 
           const geoLayer = L.geoJSON(geojson, {
             style: {

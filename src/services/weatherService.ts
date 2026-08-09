@@ -37,7 +37,7 @@ function formatShortDay(dateStr: string): string {
   try {
     const d = new Date(dateStr);
     return d.toLocaleDateString('en-US', { weekday: 'short' });
-  } catch (e) {
+  } catch {
     return dateStr;
   }
 }
