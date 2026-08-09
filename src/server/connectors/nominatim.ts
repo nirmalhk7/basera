@@ -1,5 +1,6 @@
 import { bboxForGeometry, INDIA_BBOX, isAreaGeometry } from "@/server/geo";
 import { readJsonWithByteLimit } from "@/server/http";
+import { toBoundaryCandidate, type BoundaryProvider } from "@/server/boundaries";
 import type { AreaSearchResult } from "@/types/research";
 
 const DEFAULT_NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org";
@@ -89,6 +90,11 @@ function normalizeResult(value: unknown): AreaSearchResult | null {
     source: {
       name: "OpenStreetMap Nominatim",
       url: `https://www.openstreetmap.org/${identifier.osmType}/${identifier.osmId}`,
+    },
+    boundary: {
+      sourceType: "community",
+      confidence: "medium",
+      editable: true,
     },
     geometry: value.geojson,
     bbox: bboxForGeometry(value.geojson),
@@ -247,4 +253,28 @@ export function clearNominatimConnectorCacheForTests(): void {
   areaCache.clear();
   areaInFlight.clear();
   nextDefaultRequestAt = 0;
+}
+
+/** Community fallback only; official providers are registered independently in the boundary layer. */
+export function createNominatimBoundaryProvider(fetcher: typeof fetch = fetch): BoundaryProvider {
+  return {
+    metadata: {
+      id: "nominatim",
+      name: "OpenStreetMap Nominatim",
+      provenance: "community",
+      authority: "OpenStreetMap community data",
+      termsUrl: "https://www.openstreetmap.org/copyright",
+      health: "healthy",
+      supportedSearchKinds: ["locality", "ward", "village", "town", "pin", "address", "project", "landmark"],
+    },
+    async search(intent) {
+      if (!this.metadata.supportedSearchKinds.includes(intent.kind)) return [];
+      const response = await searchNominatimAreas(intent.query, fetcher);
+      return response.areas.map((area) => toBoundaryCandidate(area, "nominatim", intent.kind, true));
+    },
+    async resolve(id) {
+      const area = await resolveNominatimArea(id, fetcher);
+      return area ? toBoundaryCandidate(area, "nominatim", "locality", true) : null;
+    },
+  };
 }
