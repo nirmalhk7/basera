@@ -431,7 +431,7 @@ export function estimateMonthlyClimate(lat: number, elevationMeters: number = 50
 /**
  * Fetch actual GeoJSON boundary polygon of a place/district from OpenStreetMap Nominatim API
  */
-export async function fetchPlaceGeoJSONBoundary(placeName: string, lat: number, lon: number): Promise<any | null> {
+export async function fetchPlaceGeoJSONBoundary(placeName: string): Promise<GeoJsonObject | null> {
   try {
     // We try to query exactly the provided name (e.g. "Khadki", "Pune Municipal Corporation")
     // without forcing it to be a "district".

@@ -271,7 +271,7 @@ export default function IndiaTerrainMap() {
     // Added 1200ms delay to respect Nominatim's 1 req/sec strict rate limit, as this is fired
     // right after reverse geocoding completes.
     const fetchTimer = setTimeout(() => {
-      fetchPlaceGeoJSONBoundary(targetName, targetCoords[0], targetCoords[1]).then(geojson => {
+      fetchPlaceGeoJSONBoundary(targetName).then(geojson => {
         if (!isMounted || !mapInstanceRef.current) return;
 
         if (geojson) {
