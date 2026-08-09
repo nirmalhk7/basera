@@ -22,6 +22,11 @@ export function EvidencePanel({ feature }: EvidencePanelProps) {
       <p className="text-[10px] font-bold tracking-[0.22em] text-cyan-300/80 uppercase">Evidence</p>
       <h2 id="evidence-title" className="mt-1 text-base font-semibold text-white">{feature.title}</h2>
       <p className="mt-1 text-xs font-medium text-cyan-200">{feature.layerId} · {feature.status}</p>
+      {feature.containment === 'intersects' ? (
+        <p className="mt-3 rounded-md border border-amber-300/25 bg-amber-300/[0.08] px-3 py-2 text-xs leading-5 text-amber-100">
+          Boundary relation: intersects. The source geometry crosses the selected area; it is not wholly inside.
+        </p>
+      ) : null}
       <p className="mt-4 text-sm leading-6 text-slate-300">{feature.explanation}</p>
       <dl className="mt-4 grid grid-cols-2 gap-2 text-xs">
         <div className="rounded border border-white/10 bg-white/[0.025] p-2"><dt className="text-slate-500">Impact</dt><dd className="mt-1 font-medium text-slate-200 capitalize">{feature.impact}</dd></div>
