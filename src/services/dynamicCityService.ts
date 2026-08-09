@@ -1,4 +1,5 @@
 import { DynamicCityInfo } from '../types/city';
+import type { GeoJsonObject } from 'geojson';
 
 export function getWeatherDescriptionFromCode(code: number): string {
   if (code === 0) return 'Clear Sky';
@@ -109,7 +110,7 @@ export async function fetchDynamicCityInfo(lat: number, lng: number): Promise<Dy
   let state_planning_email: string | undefined = undefined;
   let planning_authority: string | undefined = undefined;
   let town_planner_jurisdiction: string | undefined = undefined;
-  let geoJsonBoundary: any = undefined;
+  let geoJsonBoundary: GeoJsonObject | undefined;
   let planning_documents: { title: string; url: string }[] | undefined = undefined;
   let state_planning_portal: string | undefined = undefined;
   let search_documents_url: string | undefined = undefined;

@@ -1,3 +1,5 @@
+import type { GeoJsonObject } from 'geojson';
+
 export interface DynamicCityInfo {
   name: string;
   rawLocalityName?: string; // Exact name of the village/town/city for polygon searches
@@ -16,7 +18,7 @@ export interface DynamicCityInfo {
   state_planning_email?: string;
   planning_authority?: string;
   town_planner_jurisdiction?: string;
-  geoJsonBoundary?: any;
+  geoJsonBoundary?: GeoJsonObject;
   planning_documents?: { title: string; url: string }[];
   state_planning_portal?: string;
   search_documents_url?: string;

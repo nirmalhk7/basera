@@ -1,3 +1,5 @@
+import type { GeoJsonObject } from 'geojson';
+
 export const INDIA_BOUNDS_COORDS = {
   southWest: [4.5, 58.0] as [number, number],
   northEast: [39.0, 99.5] as [number, number]
@@ -33,7 +35,7 @@ export interface DetectedPlace {
   coordinates: [number, number]; // [lat, lng]
   detectionRadiusKm: number;
   distanceKm?: number;
-  geoJsonBoundary?: any; // GeoJSON Polygon or MultiPolygon
+  geoJsonBoundary?: GeoJsonObject; // GeoJSON Polygon or MultiPolygon
 }
 
 export const CITY_ZOOM_THRESHOLD = 8.5;
@@ -444,7 +446,7 @@ export async function fetchPlaceGeoJSONBoundary(placeName: string, lat: number, 
       if (Array.isArray(data) && data.length > 0) {
         for (const item of data) {
           if (item.geojson && (item.geojson.type === 'Polygon' || item.geojson.type === 'MultiPolygon')) {
-            return item.geojson;
+            return item.geojson as GeoJsonObject;
           }
         }
       }
