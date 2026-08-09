@@ -62,10 +62,7 @@ export default function IndiaTerrainMap() {
   const [centerCoords, setCenterCoords] = useState<[number, number]>(INDIA_CENTER);
 
   useEffect(() => {
-    if (!searchQuery || searchQuery.trim().length < 2) {
-      setResults([]);
-      return;
-    }
+    if (!searchQuery || searchQuery.trim().length < 2) return;
 
     const timer = setTimeout(async () => {
       setSearching(true);
@@ -365,6 +362,7 @@ export default function IndiaTerrainMap() {
               value={searchQuery}
               onChange={e => {
                 setSearchQuery(e.target.value);
+                if (e.target.value.trim().length < 2) setResults([]);
                 setShowDropdown(true);
               }}
               onFocus={() => setShowDropdown(true)}
@@ -372,7 +370,10 @@ export default function IndiaTerrainMap() {
             />
             {searchQuery && (
               <button
-                onClick={() => setSearchQuery('')}
+                onClick={() => {
+                  setSearchQuery('');
+                  setResults([]);
+                }}
                 className="text-xs px-2 py-0.5 rounded bg-white/10 text-slate-300 hover:text-white"
               >
                 Clear

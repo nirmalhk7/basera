@@ -27,10 +27,7 @@ export function MapControls({
   const [searching, setSearching] = useState(false);
 
   useEffect(() => {
-    if (!searchQuery || searchQuery.trim().length < 2) {
-      setResults([]);
-      return;
-    }
+    if (!searchQuery || searchQuery.trim().length < 2) return;
 
     const timer = setTimeout(async () => {
       setSearching(true);
@@ -79,6 +76,7 @@ export function MapControls({
               value={searchQuery}
               onChange={e => {
                 setSearchQuery(e.target.value);
+                if (e.target.value.trim().length < 2) setResults([]);
                 setShowDropdown(true);
               }}
               onFocus={() => setShowDropdown(true)}
@@ -86,7 +84,10 @@ export function MapControls({
             />
             {searchQuery && (
               <button
-                onClick={() => setSearchQuery('')}
+                onClick={() => {
+                  setSearchQuery('');
+                  setResults([]);
+                }}
                 className="text-xs px-2 py-0.5 rounded bg-white/10 text-slate-300 hover:text-white"
               >
                 Clear
