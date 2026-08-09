@@ -1,7 +1,7 @@
 'use client';
 
 import { RESEARCH_LAYERS } from '@/config/researchLayers';
-import type { LayerDefinition, LayerId, ResearchMode } from '@/types/research';
+import type { AreaCatalogEntry, LayerDefinition, LayerId, ResearchMode } from '@/types/research';
 
 export interface LayerCoverageView {
   level: string;
@@ -14,14 +14,14 @@ interface LayerCatalogProps {
   selectedLayerIds: readonly LayerId[];
   loadingLayerIds: readonly LayerId[];
   coverageByLayer: Record<string, LayerCoverageView>;
+  catalogByLayer: Record<string, AreaCatalogEntry>;
   onToggle: (layerId: LayerId) => void;
 }
 
 function coverageTone(level?: string): string {
+  if (level === 'available') return 'border-emerald-300/30 bg-emerald-300/10 text-emerald-200';
   if (level === 'unavailable') return 'border-amber-300/30 bg-amber-300/10 text-amber-200';
   if (level === 'partial') return 'border-orange-300/30 bg-orange-300/10 text-orange-200';
-  if (level === 'strong') return 'border-emerald-300/30 bg-emerald-300/10 text-emerald-200';
-  if (level === 'weak') return 'border-yellow-300/30 bg-yellow-300/10 text-yellow-200';
   if (level === 'failed') return 'border-rose-300/30 bg-rose-300/10 text-rose-200';
   return 'border-slate-500/30 bg-slate-500/10 text-slate-300';
 }
