@@ -13,6 +13,8 @@ const MAX_CONTENT_LENGTH = 5_000_000;
 const CACHE_TTL_MS = 30_000;
 const MAX_CACHE_ENTRIES = 100;
 const MAX_CONCURRENT_REQUESTS = 2;
+const MAX_QUEUED_REQUESTS = 16;
+const MAX_CONTAINMENT_WORK = 5_000_000;
 
 export type CurrentOsmLayerId = Extract<
   LayerId,
@@ -88,6 +90,7 @@ type OsmElement = {
 type OverpassPayload = {
   elements: OsmElement[];
   osm3s?: { timestamp_osm_base?: unknown };
+  remark?: unknown;
 };
 
 const cache = new Map<string, { expiresAt: number; value: OverpassLayerQuery }>();
@@ -195,10 +198,6 @@ function elementTitle(element: OsmElement, layerId: CurrentOsmLayerId): string {
   return `${elementCategory(element, layerId).replace(/_/g, " ")} (${element.type} ${element.id})`;
 }
 
-function elementDescription(element: OsmElement, layerId: CurrentOsmLayerId): string {
-  return `OpenStreetMap records this ${elementCategory(element, layerId).replace(/_/g, " ")} inside the selected area.`;
-}
-
 const ATTRIBUTE_TAGS: readonly [key: string, label: string][] = [
   ["amenity", "Amenity"],
   ["healthcare", "Healthcare"],
@@ -257,7 +256,7 @@ function elementStatus(element: OsmElement): ResearchFeature["status"] {
 function isOverpassPayload(value: unknown): value is OverpassPayload {
   return isRecord(value) && Array.isArray(value.elements) && value.elements.every((element) =>
     isRecord(element) && (element.type === "node" || element.type === "way" || element.type === "relation") &&
-    typeof element.id === "number" && Number.isFinite(element.id),
+    typeof element.id === "number" && Number.isSafeInteger(element.id) && element.id > 0,
   );
 }
 
@@ -265,13 +264,14 @@ function normalizedFeature(
   element: OsmElement,
   layerId: CurrentOsmLayerId,
   areaGeometry: AreaSelection["geometry"],
+  resolved: NonNullable<ReturnType<typeof geometryFromElement>>,
   timestamp: string | undefined,
+  fetchedAt: string,
 ): ResearchFeature | null {
-  const resolved = geometryFromElement(element);
-  if (!resolved) return null;
   const containment = classifyGeometryContainment(resolved.geometry, areaGeometry);
   if (containment === "outside") return null;
   const sourceUrl = `https://www.openstreetmap.org/${element.type}/${element.id}`;
+  const category = elementCategory(element, layerId).replace(/_/g, " ");
   return {
     id: `osm:${element.type}/${element.id}`,
     layerId,
@@ -280,15 +280,17 @@ function normalizedFeature(
     mode: "current",
     status: elementStatus(element),
     impact: "unclear",
-    explanation: elementDescription(element, layerId),
+    explanation: containment === "intersects"
+      ? `OpenStreetMap records this ${category} intersecting the selected area.`
+      : `OpenStreetMap records this ${category} inside the selected area.`,
     attributes: elementAttributes(element),
     containment,
     source: {
       name: "OpenStreetMap",
       url: sourceUrl,
       sourceType: "community",
-      fetchedAt: new Date().toISOString(),
-      publishedAt: timestamp,
+      fetchedAt,
+      datasetUpdatedAt: timestamp,
     },
     confidence: {
       evidence: "medium",
@@ -316,16 +318,33 @@ function storeCachedResult(key: string, value: OverpassLayerQuery): void {
   cache.set(key, { value, expiresAt: now + CACHE_TTL_MS });
 }
 
-async function withOverpassSlot<T>(operation: () => Promise<T>): Promise<T> {
-  if (activeRequests >= MAX_CONCURRENT_REQUESTS) {
-    await new Promise<void>((resolve) => queuedRequests.push(resolve));
+async function withOverpassSlot<T>(signal: AbortSignal, operation: () => Promise<T>): Promise<T> {
+  signal.throwIfAborted();
+  if (activeRequests < MAX_CONCURRENT_REQUESTS) {
+    activeRequests += 1;
+  } else {
+    if (queuedRequests.length >= MAX_QUEUED_REQUESTS) throw new Error("Overpass request queue is full");
+    await new Promise<void>((resolve, reject) => {
+      function grantSlot() {
+        signal.removeEventListener("abort", cancel);
+        resolve();
+      }
+      function cancel() {
+        const index = queuedRequests.indexOf(grantSlot);
+        if (index !== -1) queuedRequests.splice(index, 1);
+        reject(signal.reason);
+      }
+      queuedRequests.push(grantSlot);
+      signal.addEventListener("abort", cancel, { once: true });
+    });
   }
-  activeRequests += 1;
   try {
+    signal.throwIfAborted();
     return await operation();
   } finally {
-    activeRequests -= 1;
-    queuedRequests.shift()?.();
+    const next = queuedRequests.shift();
+    if (next) next();
+    else activeRequests -= 1;
   }
 }
 
@@ -336,7 +355,9 @@ async function requestOverpassLayer(
   signal?: AbortSignal,
 ): Promise<OverpassLayerQuery> {
   const query = buildOverpassQuery(layerId, area.bbox);
-  return withOverpassSlot(async () => {
+  const timeout = AbortSignal.timeout(TIMEOUT_MS);
+  const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  return withOverpassSlot(requestSignal, async () => {
     const response = await fetcher(OVERPASS_URL, {
       method: "POST",
       headers: {
@@ -345,17 +366,34 @@ async function requestOverpassLayer(
         "User-Agent": "Basera/0.1 (geospatial research; https://github.com/nirmalhk7/basera)",
       },
       body: `data=${encodeURIComponent(query)}`,
-      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(TIMEOUT_MS)]) : AbortSignal.timeout(TIMEOUT_MS),
+      signal: requestSignal,
       cache: "no-store",
     });
     if (!response.ok) throw new Error(`Overpass request failed (${response.status})`);
     const payload = await readJsonWithByteLimit(response, MAX_CONTENT_LENGTH);
     if (!isOverpassPayload(payload)) throw new Error("Overpass response has an invalid shape");
-    const timestamp = typeof payload.osm3s?.timestamp_osm_base === "string" ? payload.osm3s.timestamp_osm_base : undefined;
-    const truncated = payload.elements.length >= MAX_FEATURES;
-    const features = payload.elements.slice(0, MAX_FEATURES)
-      .map((element) => normalizedFeature(element, layerId, area.geometry, timestamp))
-      .filter((feature): feature is ResearchFeature => feature !== null);
+    if (payload.remark !== undefined) throw new Error("Overpass did not return a complete result");
+    const sourceTimestamp = payload.osm3s?.timestamp_osm_base;
+    const timestamp = typeof sourceTimestamp === "string" && Number.isFinite(Date.parse(sourceTimestamp))
+      ? sourceTimestamp : undefined;
+    const fetchedAt = new Date().toISOString();
+    const polygons = area.geometry.type === "Polygon" ? [area.geometry.coordinates] : area.geometry.coordinates;
+    const boundaryVertices = polygons.flat().reduce((count, ring) => count + ring.length, 0);
+    let remainingWork = MAX_CONTAINMENT_WORK;
+    let truncated = payload.elements.length >= MAX_FEATURES;
+    const features: ResearchFeature[] = [];
+    for (const element of payload.elements.slice(0, MAX_FEATURES)) {
+      const resolved = geometryFromElement(element);
+      if (!resolved) continue;
+      const work = boundaryVertices * resolved.positions.length;
+      if (work > remainingWork) {
+        truncated = true;
+        continue;
+      }
+      remainingWork -= work;
+      const feature = normalizedFeature(element, layerId, area.geometry, resolved, timestamp, fetchedAt);
+      if (feature) features.push(feature);
+    }
     return { features, osmBaseTimestamp: timestamp, truncated };
   });
 }

@@ -1,4 +1,4 @@
-import { bboxForGeometry, INDIA_BBOX, isAreaGeometry } from "@/server/geo";
+import { bboxForGeometry, canonicalAreaGeometry, INDIA_BBOX, isAreaGeometry } from "@/server/geo";
 import { readJsonWithByteLimit } from "@/server/http";
 import { toBoundaryCandidate, type BoundaryProvider } from "@/server/boundaries";
 import type { AreaSearchResult } from "@/types/research";
@@ -96,7 +96,7 @@ function normalizeResult(value: unknown): AreaSearchResult | null {
       confidence: "medium",
       editable: true,
     },
-    geometry: value.geojson,
+    geometry: canonicalAreaGeometry(value.geojson),
     bbox: bboxForGeometry(value.geojson),
   };
 }
@@ -131,7 +131,7 @@ function storeUnresolvedArea(areaId: string): void {
   storeCachedAreaValue(areaId, null, NEGATIVE_CACHE_TTL_MS);
 }
 
-async function waitForNominatimRateLimit(): Promise<void> {
+export async function waitForNominatimRateLimit(): Promise<void> {
   const now = Date.now();
   const scheduledAt = Math.max(now, nextDefaultRequestAt);
   const waitMs = scheduledAt - now;
@@ -264,7 +264,7 @@ export function createNominatimBoundaryProvider(fetcher: typeof fetch = fetch): 
       provenance: "community",
       authority: "OpenStreetMap community data",
       termsUrl: "https://www.openstreetmap.org/copyright",
-      health: "healthy",
+      health: "unknown",
       supportedSearchKinds: ["locality", "ward", "village", "town", "pin", "address", "project", "landmark"],
     },
     async search(intent) {

@@ -136,7 +136,7 @@ describe("boundary provider contract", () => {
 
     const results = await provider.search(intent);
 
-    expect(provider.metadata).toMatchObject({ provenance: "community", health: "healthy" });
+    expect(provider.metadata).toMatchObject({ provenance: "community", health: "unknown" });
     expect(results).toHaveLength(1);
     expect(results[0]).toMatchObject({
       providerId: "nominatim",

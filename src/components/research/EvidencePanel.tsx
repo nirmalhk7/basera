@@ -51,6 +51,9 @@ export function EvidencePanel({ feature }: EvidencePanelProps) {
         <p className="text-[10px] font-bold tracking-[0.18em] text-slate-500 uppercase">Source</p>
         <p className="mt-1 text-sm text-slate-200">{feature.source.name} <span className="text-slate-500">· {feature.source.sourceType}</span></p>
         <p className="mt-1 text-xs text-slate-500">Fetched {new Date(feature.source.fetchedAt).toLocaleString()}</p>
+        {feature.source.datasetUpdatedAt ? (
+          <p className="mt-1 text-xs text-slate-500">Source dataset updated {new Date(feature.source.datasetUpdatedAt).toLocaleString()}</p>
+        ) : null}
         <a href={feature.source.url} target="_blank" rel="noreferrer" className="mt-3 inline-flex rounded-md border border-cyan-300/30 px-3 py-1.5 text-xs font-bold text-cyan-200 transition hover:bg-cyan-300/10">
             Open original source
         </a>

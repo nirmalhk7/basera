@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { bboxForGeometry, bboxMatchesGeometry, isAreaGeometry, isValidBbox } from "@/server/geo";
+import { bboxMatchesGeometry, canonicalAreaGeometry, isAreaGeometry, isValidBbox } from "@/server/geo";
 import type { AreaGeometry, AreaSelection } from "@/types/research";
 import { validateEditableAreaGeometry } from "@/utils/researchGeometry";
 import type { AreaReferenceStore } from "./store";
@@ -59,8 +59,8 @@ export class AreaReferenceService {
       countryCode: "in",
       source: { name: "User-drawn boundary", url: "https://github.com/nirmalhk7/basera" },
       boundary: { sourceType: "user", confidence: "low", editable: true },
-      geometry,
-      bbox: bboxForGeometry(geometry),
+      geometry: canonicalAreaGeometry(geometry),
+      bbox: validation.bbox,
     };
     const reference: StoredAreaReference = {
       version: AREA_REFERENCE_SCHEMA_VERSION,
@@ -89,7 +89,7 @@ export class AreaReferenceService {
     if (!raw) return null;
     const reference = parseReference(raw, id);
     if (!reference || reference.expiresAt <= this.now()) return null;
-    return reference.area;
+    return { ...reference.area, geometry: canonicalAreaGeometry(reference.area.geometry) };
   }
 }
 

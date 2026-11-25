@@ -15,7 +15,9 @@ function coordinatesMatch(first: GeoPosition, second: GeoPosition): boolean {
   return first[0] === second[0] && first[1] === second[1];
 }
 
-function isFinitePosition(position: GeoPosition): boolean {
+function isFinitePosition(position: unknown): position is GeoPosition {
+  if (!Array.isArray(position) || position.length < 2 || position.length > 3 ||
+      (position.length === 3 && !Number.isFinite(position[2]))) return false;
   const [longitude, latitude] = position;
   return (
     Number.isFinite(longitude) &&
@@ -83,31 +85,28 @@ function ringHasSelfIntersection(ring: LinearRing): boolean {
   return false;
 }
 
+function isClosedLinearRing(ring: LinearRing): boolean {
+  return Array.isArray(ring) && ring.length >= MINIMUM_RING_POSITIONS &&
+    ring.every(isFinitePosition) && coordinatesMatch(ring[0], ring[ring.length - 1]);
+}
+
 export function isValidLinearRing(ring: LinearRing): boolean {
-  if (ring.length < MINIMUM_RING_POSITIONS) {
-    return false;
-  }
-
-  const first = ring[0];
-  const last = ring[ring.length - 1];
-
-  return ring.every(isFinitePosition) &&
-    coordinatesMatch(first, last) &&
-    ringHasArea(ring);
+  return isClosedLinearRing(ring) && ringHasArea(ring);
 }
 
-function isValidPolygon(polygon: PolygonGeometry): boolean {
-  return polygon.coordinates.length > 0 && polygon.coordinates.every(isValidLinearRing);
+function hasValidAreaGeometryShape(value: unknown): value is AreaGeometry {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const { type, coordinates } = value as Partial<AreaGeometry>;
+  if (!Array.isArray(coordinates) || coordinates.length === 0) return false;
+  if (type === 'Polygon') return coordinates.every(isClosedLinearRing);
+  return type === 'MultiPolygon' && coordinates.every((polygon) =>
+    Array.isArray(polygon) && polygon.length > 0 && polygon.every(isClosedLinearRing));
 }
 
-export function isValidAreaGeometry(geometry: AreaGeometry): boolean {
-  if (geometry.type === 'Polygon') {
-    return isValidPolygon(geometry);
-  }
-
-  return geometry.coordinates.length > 0 && geometry.coordinates.every((coordinates) =>
-    isValidPolygon({ type: 'Polygon', coordinates }),
-  );
+export function isValidAreaGeometry(geometry: unknown): geometry is AreaGeometry {
+  if (!hasValidAreaGeometryShape(geometry)) return false;
+  const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+  return polygons.every((polygon) => polygon.every(ringHasArea));
 }
 
 export function getAreaGeometryBounds(geometry: AreaGeometry): BoundingBox | null {
@@ -146,24 +145,15 @@ export type EditableGeometryValidation =
   | { readonly valid: false; readonly reason: 'invalid-geometry' | 'self-intersection' | 'outside-india' | 'too-many-vertices' | 'too-large' };
 
 export function validateEditableAreaGeometry(value: unknown): EditableGeometryValidation {
-  if (!value || typeof value !== 'object' || !isValidAreaGeometry(value as AreaGeometry)) {
-    const candidate = value as { type?: unknown; coordinates?: unknown } | null;
-    if (candidate?.type === 'Polygon' && Array.isArray(candidate.coordinates) &&
-        candidate.coordinates.some((ring) => Array.isArray(ring) && ringHasSelfIntersection(ring as LinearRing))) {
-      return { valid: false, reason: 'self-intersection' };
-    }
-    return { valid: false, reason: 'invalid-geometry' };
-  }
-
-  const geometry = value as AreaGeometry;
-  const bbox = getAreaGeometryBounds(geometry);
-  if (!bbox) return { valid: false, reason: 'invalid-geometry' };
-  const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+  if (!hasValidAreaGeometryShape(value)) return { valid: false, reason: 'invalid-geometry' };
+  const count = vertexCount(value);
+  if (count > MAX_EDITABLE_VERTICES) return { valid: false, reason: 'too-many-vertices' };
+  const polygons = value.type === 'Polygon' ? [value.coordinates] : value.coordinates;
   if (polygons.some((polygon) => polygon.some((ring) => ringHasSelfIntersection(ring)))) {
     return { valid: false, reason: 'self-intersection' };
   }
-  const count = vertexCount(geometry);
-  if (count > MAX_EDITABLE_VERTICES) return { valid: false, reason: 'too-many-vertices' };
+  const bbox = getAreaGeometryBounds(value);
+  if (!bbox) return { valid: false, reason: 'invalid-geometry' };
   if (
     bbox[0] < INDIA_BOUNDS[0] ||
     bbox[1] < INDIA_BOUNDS[1] ||

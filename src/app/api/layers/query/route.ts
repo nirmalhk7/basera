@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { resolveAreaReference } from "@/server/connectors/areaReferences";
 import { bboxMatchesGeometry, INDIA_BBOX, isAreaGeometry } from "@/server/geo";
+import { BodyTooLargeError, PRIVATE_NO_STORE_HEADERS, readJsonWithByteLimit } from "@/server/http";
 import { isLiveQueryBboxSafe } from "@/server/connectors/overpass";
 import { orchestrateLayerQueries } from "@/server/connectors/registry";
 import type { AreaSelection, LayerId, LayerQueryRequest, LayerQueryResponse, SourceReference } from "@/types/research";
@@ -48,35 +49,6 @@ function isWithinIndiaBbox(bbox: AreaSelection["bbox"]): boolean {
     bbox[2] <= INDIA_BBOX[2] && bbox[3] <= INDIA_BBOX[3];
 }
 
-class RequestBodyTooLargeError extends Error {}
-
-async function readRequestBody(request: Request): Promise<string> {
-  const reader = request.body?.getReader();
-  if (!reader) return "";
-
-  const decoder = new TextDecoder();
-  let byteLength = 0;
-  let text = "";
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) return text + decoder.decode();
-      byteLength += value.byteLength;
-      if (byteLength > MAX_BODY_BYTES) {
-        try {
-          await reader.cancel("Request body is too large.");
-        } catch {
-          // The request is already rejected below; cancellation is best-effort for a broken stream.
-        }
-        throw new RequestBodyTooLargeError();
-      }
-      text += decoder.decode(value, { stream: true });
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
 function isLayerQueryRequest(value: unknown): value is LayerQueryRequest {
   return isRecord(value) &&
     Object.keys(value).length === 3 && ["areaId", "mode", "layerIds"].every((key) => Object.prototype.hasOwnProperty.call(value, key)) &&
@@ -89,46 +61,36 @@ function isLayerQueryRequest(value: unknown): value is LayerQueryRequest {
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const declaredLength = Number(request.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
-    return NextResponse.json({ error: "Request body is too large." }, { status: 413, headers: CACHE_HEADERS });
-  }
-
   let payload: unknown;
-  let text: string;
   try {
-    text = await readRequestBody(request);
+    payload = await readJsonWithByteLimit(request, MAX_BODY_BYTES);
   } catch (error) {
-    if (error instanceof RequestBodyTooLargeError) {
+    if (error instanceof BodyTooLargeError) {
       return NextResponse.json({ error: "Request body is too large." }, { status: 413, headers: CACHE_HEADERS });
     }
-    return NextResponse.json({ error: "Request body must be valid JSON." }, { status: 400, headers: CACHE_HEADERS });
-  }
-  try {
-    payload = JSON.parse(text);
-  } catch {
     return NextResponse.json({ error: "Request body must be valid JSON." }, { status: 400, headers: CACHE_HEADERS });
   }
   if (!isLayerQueryRequest(payload)) {
     return NextResponse.json({ error: "Invalid layer query request." }, { status: 400, headers: CACHE_HEADERS });
   }
 
+  const headers = payload.areaId.startsWith("user:boundary/") ? PRIVATE_NO_STORE_HEADERS : CACHE_HEADERS;
   let area: AreaSelection | null;
   try {
     area = await resolveAreaReference(payload.areaId);
   } catch {
-    return NextResponse.json({ error: "Area resolution failed. No fallback area was used." }, { status: 502, headers: CACHE_HEADERS });
+    return NextResponse.json({ error: "Area resolution failed. No fallback area was used." }, { status: 502, headers });
   }
   if (area === null) {
-    return NextResponse.json({ error: "Area identity could not be resolved." }, { status: 404, headers: CACHE_HEADERS });
+    return NextResponse.json({ error: "Area identity could not be resolved." }, { status: 404, headers });
   }
   // The identity resolver is upstream input too. Recheck all geometry and bbox invariants before Overpass.
   if (!isAreaSelection(area)) {
-    return NextResponse.json({ error: "Resolved area is invalid. No fallback area was used." }, { status: 502, headers: CACHE_HEADERS });
+    return NextResponse.json({ error: "Resolved area is invalid. No fallback area was used." }, { status: 502, headers });
   }
   // Do not confirm mismatched or globally resolved identities to this India-only endpoint.
   if (area.id !== payload.areaId || area.countryCode !== "in" || !isWithinIndiaBbox(area.bbox)) {
-    return NextResponse.json({ error: "Area identity could not be resolved within the supported region." }, { status: 404, headers: CACHE_HEADERS });
+    return NextResponse.json({ error: "Area identity could not be resolved within the supported region." }, { status: 404, headers });
   }
 
   const uniqueLayerIds = [...new Set(payload.layerIds)];
@@ -142,5 +104,5 @@ export async function POST(request: Request) {
     providerOutcomes: orchestration.providerOutcomes,
     generatedAt: new Date().toISOString(),
   };
-  return NextResponse.json(response, { headers: CACHE_HEADERS });
+  return NextResponse.json(response, { headers });
 }

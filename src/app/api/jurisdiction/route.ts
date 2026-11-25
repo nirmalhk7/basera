@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { parseCoordinate } from '@/server/http';
 
 type Coordinate = [number, number];
 type JurisdictionGeometry =
@@ -191,10 +192,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Missing lat or lng parameters' }, { status: 400 });
   }
 
-  const lat = parseFloat(latStr);
-  const lng = parseFloat(lngStr);
+  const lat = parseCoordinate(latStr, 90);
+  const lng = parseCoordinate(lngStr, 180);
 
-  if (isNaN(lat) || isNaN(lng)) {
+  if (lat === null || lng === null) {
     return NextResponse.json({ error: 'Invalid lat or lng parameters' }, { status: 400 });
   }
 
@@ -258,19 +259,11 @@ export async function GET(req: NextRequest) {
   if (bestMatch) {
     const nameEn = bestMatch.properties.name_en || '';
     const nameEnLower = nameEn.toLowerCase().trim();
-    let curatedDocs: { title: string; url: string }[] = [];
-
-    // Fuzzy matching for city names inside our curated database
-    for (const [cityKey, docs] of Object.entries(CURATED_PLANNING_DOCS)) {
-      if (nameEnLower.includes(cityKey) || cityKey.includes(nameEnLower)) {
-        curatedDocs = docs;
-        break;
-      }
-    }
+    const curatedDocs = Object.hasOwn(CURATED_PLANNING_DOCS, nameEnLower) ? CURATED_PLANNING_DOCS[nameEnLower] : [];
 
     // State level portal lookup
     const stateName = bestMatch.properties.state || '';
-    const statePlanningPortal = STATE_MASTER_PLAN_PORTALS[stateName] || '';
+    const statePlanningPortal = Object.hasOwn(STATE_MASTER_PLAN_PORTALS, stateName) ? STATE_MASTER_PLAN_PORTALS[stateName] : '';
 
     // Construct search fallback URL (Google & DuckDuckGo)
     const authorityName = bestMatch.properties.planning_authority || nameEn;
