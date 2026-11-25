@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { AreaReferenceError, createUserBoundaryReference } from "@/server/connectors/areaReferences";
+import { BodyTooLargeError, PRIVATE_NO_STORE_HEADERS, readJsonWithByteLimit } from "@/server/http";
 import type { AreaGeometry } from "@/types/research";
 import { validateEditableAreaGeometry } from "@/utils/researchGeometry";
 
@@ -18,20 +19,13 @@ function anonymousRequestKey(request: Request): string {
 }
 
 export async function POST(request: Request) {
-  const declaredLength = Number(request.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
-    return NextResponse.json({ error: "Boundary request is too large." }, { status: 413 });
-  }
-
-  const text = await request.text();
-  if (new TextEncoder().encode(text).byteLength > MAX_BODY_BYTES) {
-    return NextResponse.json({ error: "Boundary request is too large." }, { status: 413 });
-  }
-
   let payload: unknown;
   try {
-    payload = JSON.parse(text);
-  } catch {
+    payload = await readJsonWithByteLimit(request, MAX_BODY_BYTES);
+  } catch (error) {
+    if (error instanceof BodyTooLargeError) {
+      return NextResponse.json({ error: "Boundary request is too large." }, { status: 413 });
+    }
     return NextResponse.json({ error: "Boundary request must be valid JSON." }, { status: 400 });
   }
   if (!isRecord(payload) || !("geometry" in payload)) {
@@ -49,7 +43,9 @@ export async function POST(request: Request) {
   const displayName = typeof payload.displayName === "string" ? payload.displayName : undefined;
   try {
     const created = await createUserBoundaryReference(payload.geometry as AreaGeometry, displayName, anonymousRequestKey(request));
-    return NextResponse.json({ area: created.area, expiresAt: new Date(created.expiresAt).toISOString() }, { status: 201 });
+    return NextResponse.json({ area: created.area, expiresAt: new Date(created.expiresAt).toISOString() }, {
+      status: 201, headers: PRIVATE_NO_STORE_HEADERS,
+    });
   } catch (error) {
     if (error instanceof AreaReferenceError) {
       return NextResponse.json({ error: error.message }, {

@@ -2,7 +2,7 @@ import { INDIA_BBOX, isAreaGeometry } from "@/server/geo";
 import type { AreaGeometry, AreaSelection, BoundingBox } from "@/types/research";
 
 export type SearchKind = "locality" | "ward" | "village" | "town" | "pin" | "address" | "project" | "landmark" | "coordinates";
-export type ProviderHealth = "healthy" | "degraded" | "unavailable" | "unconfigured";
+export type ProviderHealth = "unknown" | "healthy" | "degraded" | "unavailable" | "unconfigured";
 export type ProviderProvenance = "official" | "community" | "user";
 
 export interface BoundaryProviderMetadata {

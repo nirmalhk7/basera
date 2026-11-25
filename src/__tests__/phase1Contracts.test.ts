@@ -57,6 +57,12 @@ describe('Phase 1 contracts', () => {
     expect(classifyGeometryContainment(outsidePoint, square)).toBe('outside');
   });
 
+  it('returns an input error for an incomplete boundary geometry', async () => {
+    const response = await createBoundary(request({ geometry: { type: 'Polygon', coordinates: null } }));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ reason: 'invalid-geometry' });
+  });
+
   it('labels a polygon that encloses the selected area as intersects', () => {
     const enclosingPolygon: ResearchGeometry = {
       type: 'Polygon',
@@ -73,7 +79,7 @@ describe('Phase 1 contracts', () => {
     expect(current.find((entry) => entry.layerId === 'roads')).toMatchObject({
       availability: 'available',
       providers: [{ name: 'OpenStreetMap' }],
-      sourceHealth: 'healthy',
+      sourceHealth: 'unknown',
     });
     expect(future.find((entry) => entry.layerId === 'government_plans')).toMatchObject({
       availability: 'unavailable',
@@ -81,17 +87,17 @@ describe('Phase 1 contracts', () => {
     });
   });
 
-  it('reports configured provider health and age for a queryable current layer', async () => {
+  it('distinguishes configured availability from observed source health and age', async () => {
     const catalog = await buildAreaCatalog(area, 'current');
     const roads = catalog.find((entry) => entry.layerId === 'roads');
 
     expect(roads).toMatchObject({
       availability: 'available',
-      sourceHealth: 'healthy',
+      sourceHealth: 'unknown',
       providers: [expect.objectContaining({ name: 'OpenStreetMap' })],
     });
     expect(roads?.limitation).toContain('community-sourced');
-    expect(roads?.sourceAge).toMatch(/^PT\d+S$/);
+    expect(roads?.sourceAge).toBeUndefined();
   });
 
   it('creates a short-lived user boundary reference without a profile or permanent store', async () => {
@@ -102,6 +108,7 @@ describe('Phase 1 contracts', () => {
     const body = await response.json();
 
     expect(response.status).toBe(201);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
     expect(body.area).toMatchObject({
       displayName: 'Edited test area',
       geometry: square,
@@ -118,6 +125,7 @@ describe('Phase 1 contracts', () => {
     ));
     const catalogBody = await catalogResponse.json();
     expect(catalogResponse.status).toBe(200);
+    expect(catalogResponse.headers.get('cache-control')).toBe('private, no-store');
     expect(catalogBody.layers).toEqual(expect.arrayContaining([
       expect.objectContaining({ layerId: 'roads', availability: 'available' }),
     ]));

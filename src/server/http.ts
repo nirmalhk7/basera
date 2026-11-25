@@ -1,14 +1,25 @@
 const decoder = new TextDecoder();
 
-/** Reads a response with an enforced byte cap even when the server omits Content-Length. */
-export async function readJsonWithByteLimit(response: Response, maxBytes: number): Promise<unknown> {
-  const declaredLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-    throw new Error("Upstream response exceeds the safe response size");
-  }
-  if (!response.body) throw new Error("Upstream response has no body");
+export class BodyTooLargeError extends Error {}
 
-  const reader = response.body.getReader();
+export const PRIVATE_NO_STORE_HEADERS = { "Cache-Control": "private, no-store" };
+
+export function parseCoordinate(raw: string | null, maxAbsoluteValue: number): number | null {
+  const value = raw?.trim() ?? "";
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value)) return null;
+  const number = Number(value);
+  return Number.isFinite(number) && Math.abs(number) <= maxAbsoluteValue ? number : null;
+}
+
+/** Reads JSON with an enforced byte cap even when Content-Length is absent. */
+export async function readJsonWithByteLimit(message: Request | Response, maxBytes: number): Promise<unknown> {
+  const declaredLength = Number(message.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new BodyTooLargeError("JSON body exceeds the safe size");
+  }
+  if (!message.body) throw new Error("Missing JSON body");
+
+  const reader = message.body.getReader();
   const chunks: Uint8Array[] = [];
   let received = 0;
   try {
@@ -17,8 +28,8 @@ export async function readJsonWithByteLimit(response: Response, maxBytes: number
       if (done) break;
       received += value.byteLength;
       if (received > maxBytes) {
-        await reader.cancel();
-        throw new Error("Upstream response exceeds the safe response size");
+        void reader.cancel().catch(() => undefined);
+        throw new BodyTooLargeError("JSON body exceeds the safe size");
       }
       chunks.push(value);
     }

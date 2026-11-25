@@ -140,6 +140,7 @@ export interface SourceEvidence extends SourceReference {
   readonly sourceType: 'official' | 'community' | 'news' | 'research' | 'company';
   readonly fetchedAt: string;
   readonly publishedAt?: string;
+  readonly datasetUpdatedAt?: string;
   readonly reference?: string;
 }
 

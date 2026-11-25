@@ -49,7 +49,7 @@ describe("Overpass connector", () => {
         name: "OpenStreetMap",
         url: "https://www.openstreetmap.org/node/10",
         sourceType: "community",
-        publishedAt: "2026-07-26T12:00:00Z",
+        datasetUpdatedAt: "2026-07-26T12:00:00Z",
       },
     });
     expect(buildOverpassQuery("transport", area.bbox)).toContain('["railway"~"^(station|halt)$"]');
@@ -185,6 +185,6 @@ describe("Overpass connector", () => {
     const response = new Response('{"elements":[{"id":1}]}');
     expect(response.headers.get("content-length")).toBeNull();
 
-    await expect(readJsonWithByteLimit(response, 8)).rejects.toThrow("safe response size");
+    await expect(readJsonWithByteLimit(response, 8)).rejects.toThrow("JSON body exceeds the safe size");
   });
 });

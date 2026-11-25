@@ -16,14 +16,13 @@ export function isFinitePosition(value: unknown): value is Position {
     typeof value[1] === "number" && Number.isFinite(value[1]) && value[1] >= -90 && value[1] <= 90;
 }
 
-/** Safely narrows untrusted JSON, then delegates semantic ring validation to shared geometry utilities. */
-export function isAreaGeometry(value: unknown): value is AreaGeometry {
-  if (!value || typeof value !== "object") return false;
-  try {
-    return isValidAreaGeometry(value as AreaGeometry);
-  } catch {
-    return false;
-  }
+export const isAreaGeometry = isValidAreaGeometry;
+
+/** Retains the validated geometry members before passing data to storage or a renderer. */
+export function canonicalAreaGeometry(geometry: AreaGeometry): AreaGeometry {
+  return geometry.type === "Polygon"
+    ? { type: "Polygon", coordinates: geometry.coordinates }
+    : { type: "MultiPolygon", coordinates: geometry.coordinates };
 }
 
 export function isValidBbox(value: unknown): value is Bbox {
