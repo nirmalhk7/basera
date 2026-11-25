@@ -48,7 +48,7 @@ function featureStyle(feature: ResearchFeature, selected: boolean): L.PathOption
     opacity: 0.95,
     fillColor: color,
     fillOpacity: selected ? 0.34 : 0.16,
-    dashArray: feature.status === 'proposed' || feature.status === 'consultation' ? '7 5' : undefined
+    dashArray: feature.status === 'proposed' || feature.status === 'consultation' || feature.development?.stage === 'rule-potential' ? '7 5' : undefined
   };
 }
 

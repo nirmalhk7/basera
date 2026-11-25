@@ -1,3 +1,5 @@
+import type { DevelopmentRecord } from '@/domain/neighborhoodEvidence';
+
 /** GeoJSON positions use [longitude, latitude] order. */
 export type GeoPosition = readonly [longitude: number, latitude: number];
 
@@ -159,6 +161,7 @@ export interface ResearchFeature {
   /** Selected, source-provided OSM tags. Values are displayed as text, never executed. */
   readonly attributes?: readonly ResearchAttribute[];
   readonly source: SourceEvidence;
+  readonly development?: DevelopmentRecord;
   readonly containment?: 'inside' | 'intersects';
   readonly confidence: {
     readonly evidence: 'high' | 'medium' | 'low';

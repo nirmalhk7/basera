@@ -1,7 +1,9 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { SearchKind } from '@/server/boundaries';
 import type {
   AreaSearchResult,
   AreaCatalogEntry,
@@ -17,6 +19,8 @@ import type {
 import { AreaSearch, type AreaSearchSource } from './AreaSearch';
 import { EvidencePanel } from './EvidencePanel';
 import { LayerCatalog, type LayerCoverageView } from './LayerCatalog';
+import { DevelopmentEvidenceControls } from './DevelopmentEvidenceControls';
+import { canMapFeature, developmentStages, evidenceForStage, type DevelopmentStage } from '@/domain/neighborhoodEvidence';
 
 const ResearchMap = dynamic(() => import('./ResearchMap').then((module) => module.ResearchMap), {
   ssr: false,
@@ -102,6 +106,7 @@ export function ResearchWorkspace() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [mode, setMode] = useState<ResearchMode>('current');
+  const [stage, setStage] = useState<DevelopmentStage | null>(null);
   const [selectedLayerIds, setSelectedLayerIds] = useState<ModeData<readonly LayerId[]>>({ current: [], future: [] });
   const [loadingLayerIds, setLoadingLayerIds] = useState<readonly LayerId[]>([]);
   const [featuresByMode, setFeaturesByMode] = useState<ModeData<readonly ResearchFeature[]>>(initialFeatures);
@@ -125,7 +130,7 @@ export function ResearchWorkspace() {
     layerCacheRef.current.clear();
   }, []);
 
-  const searchAreas = useCallback(async (query: string) => {
+  const searchAreas = useCallback(async (query: string, kind?: SearchKind) => {
     searchAbortRef.current?.abort();
     const controller = new AbortController();
     searchAbortRef.current = controller;
@@ -137,7 +142,9 @@ export function ResearchWorkspace() {
     setSearchSource(null);
 
     try {
-      const response = await fetch(`/api/areas/search?q=${encodeURIComponent(query)}`, { signal: controller.signal });
+      const params = new URLSearchParams({ q: query });
+      if (kind) params.set('kind', kind);
+      const response = await fetch(`/api/areas/search?${params}`, { signal: controller.signal });
       if (!response.ok) throw new Error('Area search was unavailable.');
       const payload: unknown = await response.json();
       if (!controller.signal.aborted) {
@@ -318,15 +325,39 @@ export function ResearchWorkspace() {
   }, [confirmedAreaId, mode, selectedLayerIds]);
 
   const activeLayers = selectedLayerIds[mode];
+  const stageEvidence = stage ? evidenceForStage(featuresByMode[mode], stage) : null;
+
+  function chooseMode(candidate: ResearchMode) {
+    setMode(candidate);
+    setSelectedFeature(null);
+    setLayerError(null);
+    setLoadingLayerIds(confirmedArea ? selectedLayerIds[candidate] : []);
+  }
+
+  function inspectStageRecord(feature: ResearchFeature) {
+    setSelectedFeature(feature);
+    requestAnimationFrame(() => document.getElementById('selected-map-evidence')?.scrollIntoView({ block: 'nearest' }));
+  }
+
+  function chooseStage(candidate: DevelopmentStage) {
+    const next = developmentStages.find(({ key }) => key === candidate);
+    if (next) {
+      setStage(candidate);
+      chooseMode(next.mode);
+    }
+  }
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100">
+    <main className="h-dvh overflow-y-auto bg-slate-950 text-slate-100 lg:overflow-hidden">
       <div className="border-b border-white/10 bg-slate-950/90 px-5 py-4 backdrop-blur xl:px-7">
         <p className="text-[10px] font-bold tracking-[0.26em] text-cyan-300/80 uppercase">Basera · Phase 1</p>
         <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
           <div><h1 className="text-xl font-semibold tracking-tight text-white">Geospatial research workspace</h1><p className="mt-1 text-sm text-slate-400">Area-bound evidence, returned only by connected sources.</p></div>
-          <div className="flex rounded-lg border border-white/10 bg-white/[0.03] p-1" aria-label="Research time mode">
-            {(['current', 'future'] as const).map((candidate) => <button key={candidate} type="button" onClick={() => { setMode(candidate); setSelectedFeature(null); setLayerError(null); setLoadingLayerIds(confirmedArea ? selectedLayerIds[candidate] : []); }} aria-pressed={mode === candidate} className={`rounded-md px-3 py-1.5 text-xs font-bold capitalize transition ${mode === candidate ? 'bg-cyan-400 text-slate-950' : 'text-slate-400 hover:text-white'}`}>{candidate}</button>)}
+          <div className="flex flex-wrap items-center gap-3">
+            <Link href="/city-plans" className="text-sm font-medium text-cyan-300 underline underline-offset-4">City plans and property checks</Link>
+            <div className="flex rounded-lg border border-white/10 bg-white/[0.03] p-1" aria-label="Research time mode">
+              {(['current', 'future'] as const).map((candidate) => <button key={candidate} type="button" onClick={() => { setStage(null); chooseMode(candidate); }} aria-pressed={mode === candidate} className={`rounded-md px-3 py-1.5 text-xs font-bold capitalize transition ${mode === candidate ? 'bg-cyan-400 text-slate-950' : 'text-slate-400 hover:text-white'}`}>{candidate}</button>)}
+            </div>
           </div>
         </div>
       </div>
@@ -334,6 +365,7 @@ export function ResearchWorkspace() {
       <div className="grid min-h-[calc(100vh-105px)] grid-cols-1 lg:h-[calc(100vh-105px)] lg:min-h-0 lg:grid-cols-[300px_minmax(0,1fr)_280px] xl:grid-cols-[340px_minmax(0,1fr)_300px]">
         <aside className="order-2 border-r border-white/10 bg-slate-900/35 lg:order-1 lg:max-h-[calc(100vh-105px)] lg:overflow-y-auto">
           <AreaSearch results={searchResults} source={searchSource} isSearching={isSearching} error={searchError} selectedArea={pendingArea} confirmedArea={confirmedArea} hasSearched={hasSearched} onSearch={searchAreas} onSelect={setPendingArea} onConfirm={confirmArea} onCancel={() => setPendingArea(null)} onEditBoundary={startBoundaryEdit} />
+          <DevelopmentEvidenceControls stage={stage} onStage={chooseStage} onMap={stageEvidence?.onMap ?? []} offMap={stageEvidence?.offMap ?? []} onSelect={inspectStageRecord} confirmed={!!confirmedArea} />
           <LayerCatalog
             mode={mode}
             disabled={!confirmedArea}
@@ -346,8 +378,8 @@ export function ResearchWorkspace() {
           {boundaryError ? <p role="alert" className="px-5 pb-3 text-sm text-rose-300">{boundaryError}</p> : null}
           {layerError ? <p role="alert" className="px-5 pb-5 text-sm text-rose-300">{layerError}</p> : null}
         </aside>
-        <div className="order-1 lg:order-2"><ResearchMap area={confirmedArea} features={featuresByMode[mode]} selectedFeatureId={selectedFeature?.id ?? null} onSelectFeature={setSelectedFeature} isEditingBoundary={isEditingBoundary} draftBoundary={draftBoundary} onBoundaryPoint={addBoundaryPoint} onFinishBoundary={finishBoundaryEdit} onCancelBoundary={cancelBoundaryEdit} /></div>
-        <div className="order-3"><EvidencePanel feature={selectedFeature} /></div>
+        <div className="order-1 lg:order-2"><ResearchMap area={confirmedArea} features={stageEvidence?.onMap ?? featuresByMode[mode].filter(canMapFeature)} selectedFeatureId={selectedFeature?.id ?? null} onSelectFeature={setSelectedFeature} isEditingBoundary={isEditingBoundary} draftBoundary={draftBoundary} onBoundaryPoint={addBoundaryPoint} onFinishBoundary={finishBoundaryEdit} onCancelBoundary={cancelBoundaryEdit} /></div>
+        <div id="selected-map-evidence" className="order-3"><EvidencePanel feature={selectedFeature} areaLabel={confirmedArea?.displayName} /></div>
       </div>
     </main>
   );

@@ -9,6 +9,10 @@
 
 Basera does not estimate prices or rent, recommend purchases, rank areas, produce livability scores, or present modelled measurements as official observations.
 
+## City plans and remote buyer checks
+
+Open `/buyer-check?jurisdiction=maharashtra` to compare a Maharashtra new-build apartment listing with public project details you manually find on the [official MahaRERA portal](https://maharera.maharashtra.gov.in/). Basera reports which entered fields match, differ, or cannot be compared; it does not run a live registry lookup or make purchase, title, payment, or fraud-clearance decisions. The comparison is browser-local and is not saved. This flat check does not cover resale, plots, or other states. Visit `/city-plans` from the map to choose any state or union territory, see reviewed official planning sources or find an authority manually, and choose a flat or plot workflow. The map can show returned existing conditions, but has no live city-plan, filed-proposal, building-permit or rules-potential feed. Its evidence filters separate those stages and leave unverified geometry or parcel matches off the map. The Pune guide remains at `/city-plans/pune`. Neither workflow independently verifies the parcel, title, or payee.
+
 ## Evidence model
 
 - **Current** and **Future** evidence stay separate.

@@ -1,12 +1,14 @@
 'use client';
 
 import type { ResearchFeature } from '@/types/research';
+import { developmentStages } from '@/domain/neighborhoodEvidence';
 
 interface EvidencePanelProps {
   feature: ResearchFeature | null;
+  areaLabel?: string;
 }
 
-export function EvidencePanel({ feature }: EvidencePanelProps) {
+export function EvidencePanel({ feature, areaLabel }: EvidencePanelProps) {
   if (!feature) {
     return (
       <aside aria-labelledby="evidence-title" className="border-l border-white/10 bg-slate-950/80 p-5 lg:overflow-y-auto">
@@ -21,7 +23,7 @@ export function EvidencePanel({ feature }: EvidencePanelProps) {
     <aside aria-labelledby="evidence-title" className="border-l border-white/10 bg-slate-950/80 p-5 lg:overflow-y-auto">
       <p className="text-[10px] font-bold tracking-[0.22em] text-cyan-300/80 uppercase">Evidence</p>
       <h2 id="evidence-title" className="mt-1 text-base font-semibold text-white">{feature.title}</h2>
-      <p className="mt-1 text-xs font-medium text-cyan-200">{feature.layerId} · {feature.status}</p>
+      <p className="mt-1 text-xs font-medium text-cyan-200">{feature.layerId} · {developmentStages.find(({ key }) => key === feature.development?.stage)?.label ?? feature.status}</p>
       {feature.containment === 'intersects' ? (
         <p className="mt-3 rounded-md border border-amber-300/25 bg-amber-300/[0.08] px-3 py-2 text-xs leading-5 text-amber-100">
           Boundary relation: intersects. The source geometry crosses the selected area; it is not wholly inside.
@@ -50,6 +52,11 @@ export function EvidencePanel({ feature }: EvidencePanelProps) {
       <div className="mt-5 border-t border-white/10 pt-4">
         <p className="text-[10px] font-bold tracking-[0.18em] text-slate-500 uppercase">Source</p>
         <p className="mt-1 text-sm text-slate-200">{feature.source.name} <span className="text-slate-500">· {feature.source.sourceType}</span></p>
+        {areaLabel && <p className="mt-1 text-xs text-slate-400">Area: {areaLabel}. This is not a parcel match.</p>}
+        {feature.development && <p className="mt-1 text-xs text-slate-400">Issuer: {feature.development.issuer} · Jurisdiction: {feature.development.jurisdiction} · Checked: {feature.development.checkedOn} · Parcel fit: {feature.development.parcelFit}</p>}
+        {feature.development?.stage === 'rule-potential' && <p className="mt-1 text-xs text-amber-200">Rules potential only. No known proposal, building height or future massing is implied.</p>}
+        {feature.source.publishedAt && <p className="mt-1 text-xs text-slate-400">Published: {feature.source.publishedAt}</p>}
+        {feature.source.reference && <p className="mt-1 text-xs text-slate-400">Document reference: {feature.source.reference}</p>}
         <p className="mt-1 text-xs text-slate-500">Fetched {new Date(feature.source.fetchedAt).toLocaleString()}</p>
         {feature.source.datasetUpdatedAt ? (
           <p className="mt-1 text-xs text-slate-500">Source dataset updated {new Date(feature.source.datasetUpdatedAt).toLocaleString()}</p>

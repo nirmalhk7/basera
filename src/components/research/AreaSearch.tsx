@@ -1,7 +1,19 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import type { SearchKind } from '@/server/boundaries';
 import type { AreaSearchResult } from '@/types/research';
+
+const searchKinds: readonly { value: SearchKind; label: string }[] = [
+  { value: 'locality', label: 'Locality' },
+  { value: 'ward', label: 'Ward' },
+  { value: 'village', label: 'Village' },
+  { value: 'town', label: 'Town' },
+  { value: 'pin', label: 'PIN code' },
+  { value: 'address', label: 'Address' },
+  { value: 'project', label: 'Project' },
+  { value: 'landmark', label: 'Landmark' },
+];
 
 export interface AreaSearchSource {
   readonly name: string;
@@ -17,7 +29,7 @@ interface AreaSearchProps {
   selectedArea: AreaSearchResult | null;
   confirmedArea: AreaSearchResult | null;
   hasSearched: boolean;
-  onSearch: (query: string) => void;
+  onSearch: (query: string, kind?: SearchKind) => void;
   onSelect: (area: AreaSearchResult) => void;
   onConfirm: () => void;
   onCancel: () => void;
@@ -47,7 +59,10 @@ export function AreaSearch({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextQuery = query.trim();
-    if (nextQuery) onSearch(nextQuery);
+    if (!nextQuery) return;
+    const selectedKind = new FormData(event.currentTarget).get('kind');
+    const kind = searchKinds.find((item) => item.value === selectedKind)?.value;
+    onSearch(nextQuery, kind);
   }
 
   return (
@@ -59,22 +74,31 @@ export function AreaSearch({
         </div>
       </div>
 
-      <form onSubmit={submit} className="flex gap-2">
-        <label className="sr-only" htmlFor="area-search-input">Search for an area</label>
-        <input
-          id="area-search-input"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search district, city, or state"
-          className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-cyan-400/70 focus:ring-2 focus:ring-cyan-400/15"
-        />
-        <button
-          type="submit"
-          disabled={isSearching || !query.trim()}
-          className="rounded-lg bg-cyan-400 px-3 py-2 text-sm font-bold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {isSearching ? 'Searching…' : 'Search'}
-        </button>
+      <form onSubmit={submit} className="grid gap-2">
+        <label className="flex items-center gap-2 text-xs text-slate-400">
+          Search kind
+          <select name="kind" className="rounded-md border border-white/10 bg-slate-950 px-2 py-1.5 text-slate-100 focus:border-cyan-400/70">
+            <option value="">Automatic</option>
+            {searchKinds.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+        <div className="flex gap-2">
+          <label className="sr-only" htmlFor="area-search-input">Search for an area</label>
+          <input
+            id="area-search-input"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search district, city, or state"
+            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-cyan-400/70 focus:ring-2 focus:ring-cyan-400/15"
+          />
+          <button
+            type="submit"
+            disabled={isSearching || !query.trim()}
+            className="rounded-lg bg-cyan-400 px-3 py-2 text-sm font-bold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {isSearching ? 'Searching…' : 'Search'}
+          </button>
+        </div>
       </form>
 
       {error ? <p role="alert" className="mt-3 text-sm text-rose-300">{error}</p> : null}
