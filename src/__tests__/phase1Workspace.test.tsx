@@ -70,6 +70,21 @@ describe('Phase 1 workspace boundary flow', () => {
     vi.stubGlobal('fetch', fetchMock);
   });
 
+  it('sends the selected search kind to the area search route', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ results: [area] }));
+
+    render(<ResearchWorkspace />);
+    fireEvent.change(screen.getByLabelText('Search kind'), { target: { value: 'ward' } });
+    fireEvent.change(screen.getByLabelText('Search for an area'), { target: { value: 'Ward 12, Pune' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    await screen.findByText(area.displayName);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const request = new URL(fetchMock.mock.calls[0][0], 'http://localhost');
+    expect(request.pathname).toBe('/api/areas/search');
+    expect(Object.fromEntries(request.searchParams)).toEqual({ q: 'Ward 12, Pune', kind: 'ward' });
+  });
+
   it('loads the area catalog and replaces the confirmed boundary after a user edit', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ results: [area] }))

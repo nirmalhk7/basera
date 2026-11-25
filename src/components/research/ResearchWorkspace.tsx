@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { SearchKind } from '@/server/boundaries';
 import type {
   AreaSearchResult,
   AreaCatalogEntry,
@@ -129,7 +130,7 @@ export function ResearchWorkspace() {
     layerCacheRef.current.clear();
   }, []);
 
-  const searchAreas = useCallback(async (query: string) => {
+  const searchAreas = useCallback(async (query: string, kind?: SearchKind) => {
     searchAbortRef.current?.abort();
     const controller = new AbortController();
     searchAbortRef.current = controller;
@@ -141,7 +142,9 @@ export function ResearchWorkspace() {
     setSearchSource(null);
 
     try {
-      const response = await fetch(`/api/areas/search?q=${encodeURIComponent(query)}`, { signal: controller.signal });
+      const params = new URLSearchParams({ q: query });
+      if (kind) params.set('kind', kind);
+      const response = await fetch(`/api/areas/search?${params}`, { signal: controller.signal });
       if (!response.ok) throw new Error('Area search was unavailable.');
       const payload: unknown = await response.json();
       if (!controller.signal.aborted) {
